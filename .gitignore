@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+config/
+.test-config/
+.test-media/
+*.db
+*.db-wal
+*.db-shm
