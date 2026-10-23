@@ -11,10 +11,11 @@ scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
 DEFAULT_TASKS = [
     ("每日115签到", "checkin115", "5 8 * * *", {}),
     ("每日影巢签到", "checkin_hdhive", "10 8 * * *", {}),
+    ("每日聚影签到", "checkin_jying", "15 8 * * *", {}),
     ("豆瓣想看同步", "douban", "*/30 * * * *", {"wishlist": True, "charts": [], "custom_urls": []}),
     ("Emby媒体库同步", "emby_sync", "*/20 * * * *", {}),
     ("缺集刷新", "missing_scan", "*/15 * * * *", {}),
-    ("盘搜补漏", "nullbr", "0 */2 * * *", {"push_target": "pan115", "hdhive_unlock": False}),
+    ("盘搜补漏", "pan_search", "0 */2 * * *", {"push_target": "pan115", "hdhive_unlock": False}),
     ("115增量同步", "incr_sync", "* * * * *", {}),
 ]
 

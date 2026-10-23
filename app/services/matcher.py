@@ -74,7 +74,7 @@ def match_resource(text: str, link: str, only_missing: bool = True, extra_keywor
 def record_resource(sub_id: int, title: str, link: str, source: str, parsed: dict,
                     status: str, push_target: str = "", message: str = "") -> None:
     import time
-    from ..core.nullbr import _link_type
+    from ..core.pansearch import _link_type
     d = db()
     d.execute(
         "INSERT INTO resources(sub_id,title,link,link_type,source,resolution,season,episodes,status,push_target,message,created_at)"
@@ -93,7 +93,7 @@ async def push_to_target(decision: dict, target: str, forward_chat_id: str = "")
     msg = ""
     try:
         if target == "pan115":
-            from ..core.nullbr import _link_type
+            from ..core.pansearch import _link_type
             lt = _link_type(link)
             if lt == "115":
                 r = await pan115.share_receive(link)

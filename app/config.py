@@ -12,7 +12,7 @@ LOG_DIR.mkdir(exist_ok=True)
 CACHE_DIR = BASE_DIR / "cache"
 (CACHE_DIR / "emby_images").mkdir(parents=True, exist_ok=True)
 
-WEB_PORT = int(os.environ.get("MB_PORT", "8788"))
+WEB_PORT = int(os.environ.get("MB_PORT", "8866"))
 MEDIA_ROOT = os.environ.get("MB_MEDIA_ROOT", "/media")
 # STRM 文件里写入的网关地址（Emby 能访问到的本程序地址），如 http://192.168.1.10:8788
 STRM_HOST = os.environ.get("MB_STRM_HOST", "")
@@ -34,12 +34,16 @@ _DEFAULTS = {
     # 影巢 hdhive
     "hdhive.api_key": "",
     "hdhive.gambler": "false",
-    # nullbr 盘搜
-    "nullbr.base_url": "https://api.nullbr.eu.org",
-    "nullbr.api_key": "",
-    # 自定义盘搜（兼容 pansou 类接口）
-    "pansou.base_url": "",
-    "pansou.api_key": "",
+    "hdhive.enabled": "true",
+    # 盘搜（pansou 聚合，默认千山实例；可配第二源）
+    "pansou.base_url": "https://pansou.qianshan.app",
+    "pansou.base_url2": "",
+    # AI（OpenAI 兼容接口，默认 wb-hub 反代；留空 api_key 则尝试 Gemini）
+    "ai.base_url": "http://192.168.31.201:8788/v1",
+    "ai.api_key": "",
+    "ai.model": "deepseek-v4.1-flash",
+    # 聚影 jying.top
+    "jying.api_key": "",
     # telegram
     "tg.api_id": "",
     "tg.api_hash": "",

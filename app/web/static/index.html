@@ -101,7 +101,7 @@
     <section id="page-tasks" class="page">
       <h2>定时任务</h2>
       <table id="task-list"><thead><tr><th>名称</th><th>类型</th><th>Cron</th><th>启用</th><th>上次结果</th><th>操作</th></tr></thead><tbody></tbody></table>
-      <p class="tip">任务类型：checkin115 / checkin_hdhive / douban / emby_sync / missing_scan / nullbr / tg_search / strm_sync / incr_sync / organize</p>
+      <p class="tip">任务类型：checkin115 / checkin_hdhive / checkin_jying / douban / emby_sync / missing_scan / pan_search / tg_search / strm_sync / incr_sync / organize</p>
     </section>
 
     <section id="page-resources" class="page">
@@ -121,6 +121,8 @@
         <button onclick="testService('emby')">测试 Emby</button>
         <button onclick="testService('pan115')">测试 115</button>
         <button onclick="testService('hdhive')">测试影巢</button>
+        <button onclick="testService('ai')">测试 AI</button>
+        <button onclick="testPansou()">测试盘搜</button>
         <button onclick="testService('notify')">测试通知</button>
       </div>
       <div id="test-result"></div>

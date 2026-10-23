@@ -426,6 +426,23 @@ async def test_notify(authorization: str = Header("")):
     return {"ok": await send("这是一条测试通知", "MediaButler")}
 
 
+@router.post("/test/ai")
+async def test_ai(authorization: str = Header("")):
+    _auth(authorization)
+    from ..core.parser import ai_parse_hub
+    r = await ai_parse_hub("葬送的芙莉莲 S01E05 1080p HEVC 简日内封")
+    return {"ok": r is not None, "result": r,
+            "hint": "" if r else "检查 ai.base_url / ai.api_key / ai.model（wb-hub 面板「设置」页复制 key）"}
+
+
+@router.get("/test/pansou")
+async def test_pansou(q: str = "流浪地球", authorization: str = Header("")):
+    _auth(authorization)
+    from ..core.pansearch import search_all
+    rs = await search_all(q)
+    return {"total": len(rs), "items": rs[:10]}
+
+
 # ---------- 日志 ----------
 
 @router.get("/logs")

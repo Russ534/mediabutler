@@ -83,22 +83,48 @@ def purify(text: str) -> str:
     return "\n".join(lines)
 
 
-async def ai_parse(title: str) -> dict | None:
-    """Gemini AI 兜底解析（本地正则置信度低时调用）。"""
+_AI_PROMPT = (
+    "从以下影视资源标题中提取信息，只输出JSON，字段："
+    "title(中文名),year,season(数字或null),episodes(数字数组),resolution(如1080P/4K),codec,source。标题：")
+
+
+async def ai_parse_hub(title: str) -> dict | None:
+    """wb-hub（OpenAI 兼容接口）AI 解析。默认走飞牛上的 workbuddy2api-hub 反代。"""
+    base = config.get("ai.base_url").rstrip("/")
+    key = config.get("ai.api_key")
+    if not base or not key:
+        return None
+    model = config.get("ai.model", "deepseek-v4.1-flash")
+    try:
+        from .http import client
+        async with client(timeout=40) as c:
+            r = await c.post(f"{base}/chat/completions",
+                             headers={"Authorization": f"Bearer {key}"},
+                             json={"model": model,
+                                   "messages": [{"role": "user", "content": _AI_PROMPT + title}],
+                                   "response_format": {"type": "json_object"},
+                                   "temperature": 0})
+            r.raise_for_status()
+            text = r.json()["choices"][0]["message"]["content"]
+            return json.loads(text)
+    except Exception as e:
+        log("WARN", "parser", f"hub AI 解析失败: {e}")
+        return None
+
+
+async def ai_parse_gemini(title: str) -> dict | None:
+    """Gemini AI 兜底解析。"""
     key = config.get("gemini.api_key")
     if not key:
         return None
     model = config.get("gemini.model", "gemini-2.0-flash")
-    prompt = (
-        "从以下影视资源标题中提取信息，只输出JSON，字段："
-        'title(中文名),year,season(数字或null),episodes(数字数组),resolution,codec,source。标题：' + title)
     try:
         from .http import client
         async with client("tmdb.proxy", timeout=30) as c:
             r = await c.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 params={"key": key},
-                json={"contents": [{"parts": [{"text": prompt}]}],
+                json={"contents": [{"parts": [{"text": _AI_PROMPT + title}]}],
                       "generationConfig": {"responseMimeType": "application/json"}})
             r.raise_for_status()
             text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -106,6 +132,11 @@ async def ai_parse(title: str) -> dict | None:
     except Exception as e:
         log("WARN", "parser", f"Gemini 解析失败: {e}")
         return None
+
+
+async def ai_parse(title: str) -> dict | None:
+    """AI 解析：wb-hub 优先，Gemini 兜底。"""
+    return await ai_parse_hub(title) or await ai_parse_gemini(title)
 
 
 async def smart_parse(title: str) -> dict:

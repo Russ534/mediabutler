@@ -4,7 +4,7 @@ import time
 
 from .. import config
 from ..database import db, event, log
-from ..core import douban, emby, hdhive, pan115, nullbr, notify, tmdb
+from ..core import douban, emby, hdhive, pan115, pansearch, notify, tmdb
 
 
 def _record(task_id: int, result: str) -> None:
@@ -21,6 +21,8 @@ async def run_job(job_type: str, task_id: int = 0, cfg: dict | None = None) -> s
             r = await job_checkin115()
         elif job_type == "checkin_hdhive":
             r = await job_checkin_hdhive()
+        elif job_type == "checkin_jying":
+            r = await job_checkin_jying()
         elif job_type == "douban":
             r = await job_douban(cfg)
         elif job_type == "emby_sync":
@@ -30,7 +32,7 @@ async def run_job(job_type: str, task_id: int = 0, cfg: dict | None = None) -> s
             await refresh_all_missing()
             n = mark_archived_done()
             r = f"缺集刷新完成，归档 {n} 条"
-        elif job_type == "nullbr":
+        elif job_type in ("pan_search", "nullbr"):  # nullbr 为旧任务兼容
             r = await job_pan_search(cfg)
         elif job_type == "tg_search":
             r = await job_tg_search(cfg)
@@ -66,6 +68,13 @@ async def job_checkin_hdhive() -> str:
     r = await hdhive.checkin()
     data = r.get("data") or {}
     msg = f"影巢签到: {data.get('message') or r.get('message') or r}"
+    await notify.send(msg, "每日签到")
+    return msg
+
+
+async def job_checkin_jying() -> str:
+    from ..core import jying
+    msg = await jying.checkin()
     await notify.send(msg, "每日签到")
     return msg
 
@@ -131,7 +140,7 @@ async def job_emby_sync() -> str:
 
 
 async def job_pan_search(cfg: dict) -> str:
-    """盘搜补漏：对缺失订阅走 Nullbr/自定义盘搜/影巢找资源。"""
+    """盘搜补漏：对缺失订阅走 pansou（千山）/影巢找资源。"""
     from .matcher import record_resource
     from .subscribe import refresh_missing
     d = db()
@@ -139,7 +148,7 @@ async def job_pan_search(cfg: dict) -> str:
     found = 0
     for sub in subs:
         query = f"{sub['title']} {sub['year'] or ''}".strip()
-        results = await nullbr.search_all(query)
+        results = await pansearch.search_all(query)
         # 影巢
         if sub["tmdb_id"] and config.get("hdhive.api_key"):
             try:
@@ -155,7 +164,11 @@ async def job_pan_search(cfg: dict) -> str:
                 log("WARN", "hdhive", f"影巢查询失败: {e}")
         from .matcher import match_resource, push_to_target
         for r in results:
-            for decision in match_resource(f"{r['title']} {r.get('resolution','')}", r["link"], only_missing=True):
+            link = r["link"]
+            # 115 分享链接带提取码时拼到 URL 上，转存接口才能接
+            if r.get("password") and r.get("link_type") == "115" and "password=" not in link:
+                link += ("&" if "?" in link else "?") + "password=" + r["password"]
+            for decision in match_resource(f"{r['title']} {r.get('resolution','')}", link, only_missing=True):
                 ok = await push_to_target(decision, cfg.get("push_target", "pan115"))
                 if ok:
                     found += 1

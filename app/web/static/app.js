@@ -241,9 +241,11 @@ const SETTING_GROUPS = [
   ['豆瓣', ['douban.user_id|豆瓣用户 ID', 'douban.cookie|豆瓣 Cookie', 'douban.user_agent|User-Agent']],
   ['115 网盘', ['pan115.cookie|115 Cookie（浏览器 F12 复制）']],
   ['影巢 HDHive', ['hdhive.api_key|影巢 API Key', 'hdhive.gambler|赌狗签到 true/false']],
-  ['盘搜', ['nullbr.base_url|Nullbr 地址', 'nullbr.api_key|Nullbr Key（可选）', 'pansou.base_url|自定义盘搜地址（可选）']],
+  ['盘搜', ['pansou.base_url|盘搜地址（默认千山）', 'pansou.base_url2|第二盘搜源（可选）']],
+  ['AI 解析（wb-hub）', ['ai.base_url|OpenAI 兼容地址（wb-hub）', 'ai.api_key|API Key（hub 面板设置页复制）', 'ai.model|模型']],
+  ['聚影', ['jying.api_key|聚影 API Key（jying.top）']],
   ['Telegram', ['tg.api_id|API ID', 'tg.api_hash|API Hash', 'tg.bot_token|通知 Bot Token', 'tg.notify_chat_id|通知 Chat ID', 'tg.proxy|TG 代理 socks5://（可选）']],
-  ['AI 解析', ['gemini.api_key|Gemini Key（可选）', 'gemini.model|模型']],
+  ['Gemini（AI 兜底）', ['gemini.api_key|Gemini Key（可选）', 'gemini.model|模型']],
   ['通知', ['notify.wecom_webhook|企业微信机器人 Webhook', 'notify.webhook|自定义 Webhook']],
 ];
 async function loadSettings() {
@@ -269,6 +271,11 @@ async function changePwd() {
 async function testService(name) {
   const box = $('#test-result'); box.style.display = 'block'; box.textContent = '测试中…';
   try { box.textContent = JSON.stringify(await api('/test/' + name, { method: 'POST' }), null, 2); }
+  catch (e) { box.textContent = '失败: ' + e.message; }
+}
+async function testPansou() {
+  const box = $('#test-result'); box.style.display = 'block'; box.textContent = '盘搜测试中…';
+  try { box.textContent = JSON.stringify(await api('/test/pansou?q=' + encodeURIComponent(prompt('搜索关键词', '流浪地球') || '流浪地球')), null, 2); }
   catch (e) { box.textContent = '失败: ' + e.message; }
 }
 

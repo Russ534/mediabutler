@@ -1,3 +1,5 @@
+# MediaButler · 影音管家
+# 飞牛部署约定：本文件放在 /vol1/1000/Docker/mediabutler/ 下（与其他容器同规）
 services:
   mediabutler:
     build: .
@@ -6,12 +8,14 @@ services:
     restart: always
     network_mode: bridge
     ports:
-      - "8788:8788"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口
+      - "8866:8866"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口（8788 是 wb-hub，别撞）
     volumes:
-      - "./config:/config"              # 数据库、TG session、缓存（必须持久化）
-      - "/vol1/1000/media:/media"       # ← 改成你的媒体库实际路径，STRM 落在这里
+      - "./config:/config"              # 数据库、TG session、Emby 图片缓存（必须持久化）
+      - "./media:/media"                # STRM 与元数据落地；Emby 媒体库挂载同一目录
     environment:
       - TZ=Asia/Shanghai
       # STRM 文件里写入的播放地址，必须是 Emby 容器能访问到本程序的地址
-      # 填飞牛的局域网 IP，不要填 127.0.0.1
-      - MB_STRM_HOST=http://192.168.1.10:8788   # ← 改成你的飞牛 IP
+      # 飞牛局域网 IP，不要填 127.0.0.1（容器里的 127 是它自己）
+      - MB_STRM_HOST=http://192.168.31.201:8866
+      # 容器内访问飞牛其他服务一律用 192.168.31.201，且别让局域网请求走代理
+      - NO_PROXY=192.168.31.201,127.0.0.1,localhost,::1
