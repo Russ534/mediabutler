@@ -18,7 +18,7 @@
 | 🗂️ 网盘整理 | 监听 115 待整理目录 → TMDB 匹配 → 规范重命名 → 电影/剧集分类移动 | CineChill |
 | ☁️ STRM 同步 | 115 全量同步生成 STRM + nfo/字幕/图片落地，增量同步靠 115 生活事件驱动 | CMS |
 | ▶️ Emby 反代 | `/stream` 网关 302 到 115 CDN 直链；`/emby/*` 反代带图片磁盘缓存 | CMS / CineChill |
-| ✅ 每日签到 | 115 签到、影巢签到（支持赌狗模式）、聚影 jying.top 签到，结果推送通知 | — |
+| ✅ 每日签到 | 115 签到、影巢签到（支持赌狗模式），结果推送通知 | — |
 | 🤖 AI 解析 | 正则 + AI 混合解析（默认走 wb-hub OpenAI 兼容反代，Gemini 兜底） | Media Automator |
 | 🔔 通知 | Telegram Bot / 企业微信机器人 / 自定义 Webhook | CineChill |
 | 🪝 Emby Webhook | 入库事件实时刷新订阅状态 | Media Automator |
@@ -72,7 +72,7 @@ sudo docker compose logs -f mediabutler   # 首次启动日志里打印初始密
 app/
 ├── main.py            FastAPI 入口 + 生命周期
 ├── scheduler.py       APScheduler 任务调度（DB 驱动，可热重载）
-├── core/              tmdb / douban / emby / pan115(p115client) / hdhive / jying / pansearch(pansou) / parser / notify / strm
+├── core/              tmdb / douban / emby / pan115(p115client) / hdhive(re0.me) / pansearch(pansou) / parser / notify / strm
 ├── services/          subscribe(订阅状态机) / tg_monitor(Telethon) / matcher(决策) / sync115(全量+增量) / organizer(整理) / tasks
 ├── gateway/proxy.py   STRM 302 网关 + Emby 图片缓存反代
 ├── api/               REST API + 会话认证

@@ -21,8 +21,6 @@ async def run_job(job_type: str, task_id: int = 0, cfg: dict | None = None) -> s
             r = await job_checkin115()
         elif job_type == "checkin_hdhive":
             r = await job_checkin_hdhive()
-        elif job_type == "checkin_jying":
-            r = await job_checkin_jying()
         elif job_type == "douban":
             r = await job_douban(cfg)
         elif job_type == "emby_sync":
@@ -68,13 +66,6 @@ async def job_checkin_hdhive() -> str:
     r = await hdhive.checkin()
     data = r.get("data") or {}
     msg = f"影巢签到: {data.get('message') or r.get('message') or r}"
-    await notify.send(msg, "每日签到")
-    return msg
-
-
-async def job_checkin_jying() -> str:
-    from ..core import jying
-    msg = await jying.checkin()
     await notify.send(msg, "每日签到")
     return msg
 

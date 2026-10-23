@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS tg_cache(
 CREATE TABLE IF NOT EXISTS tasks(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
-  job_type TEXT NOT NULL,              -- douban|emby_sync|pan_search|checkin115|checkin_hdhive|checkin_jying|tg_search|strm_sync|incr_sync|missing_scan|organize
+  job_type TEXT NOT NULL,              -- douban|emby_sync|pan_search|checkin115|checkin_hdhive|tg_search|strm_sync|incr_sync|missing_scan|organize
   cron TEXT DEFAULT '',
   enabled INTEGER DEFAULT 1,
   config TEXT DEFAULT '{}',

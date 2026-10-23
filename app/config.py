@@ -31,8 +31,10 @@ _DEFAULTS = {
     "douban.user_id": "",
     # 115
     "pan115.cookie": "",
-    # 影巢 hdhive
+    # 影巢 hdhive（现域名 re0.me，直连被 CF 拦截需走代理）
+    "hdhive.base_url": "https://re0.me/api/open",
     "hdhive.api_key": "",
+    "hdhive.proxy": "",
     "hdhive.gambler": "false",
     "hdhive.enabled": "true",
     # 盘搜（pansou 聚合，默认千山实例；可配第二源）
@@ -42,14 +44,13 @@ _DEFAULTS = {
     "ai.base_url": "http://192.168.31.201:8788/v1",
     "ai.api_key": "",
     "ai.model": "deepseek-v4.1-flash",
-    # 聚影 jying.top
-    "jying.api_key": "",
     # telegram
     "tg.api_id": "",
     "tg.api_hash": "",
     "tg.bot_token": "",
     "tg.notify_chat_id": "",
     "tg.proxy": "",
+    "tg.session_string": "",
     # gemini
     "gemini.api_key": "",
     "gemini.model": "gemini-2.0-flash",

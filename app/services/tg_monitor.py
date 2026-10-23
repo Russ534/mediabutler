@@ -19,28 +19,45 @@ def configured() -> bool:
 
 
 async def get_client():
-    """获取已登录的 Telethon 客户端（未登录返回 None）。"""
+    """获取已登录的 Telethon 客户端（未登录返回 None）。
+
+    优先使用 tg.session_string（StringSession，免扫码）；
+    否则回落到本地 session 文件（手机验证码登录后生成）。
+    """
     global _client
     if _client and _client.is_connected():
         return _client
     if not configured():
         return None
     from telethon import TelegramClient
-    proxy = None
-    p = config.get("tg.proxy")
-    if p:
-        # socks5://host:port
-        import re
-        m = re.match(r"socks5://(?:([^:]+):([^@]+)@)?([^:]+):(\d+)", p)
-        if m:
-            proxy = ("socks5", m.group(3), int(m.group(4)), True, m.group(1), m.group(2))
-    c = TelegramClient(config.TG_SESSION_PATH, int(config.get("tg.api_id")), config.get("tg.api_hash"),
-                       proxy=proxy)
+    c = TelegramClient(_session_spec(), int(config.get("tg.api_id")), config.get("tg.api_hash"),
+                       proxy=_proxy())
     await c.connect()
     if await c.is_user_authorized():
         _client = c
         return c
     await c.disconnect()
+    return None
+
+
+def _session_spec():
+    """session_string 优先，否则用本地 session 文件路径。"""
+    s = config.get("tg.session_string")
+    if s:
+        from telethon.sessions import StringSession
+        return StringSession(s)
+    return config.TG_SESSION_PATH
+
+
+def _proxy():
+    p = config.get("tg.proxy")
+    if not p:
+        return None
+    # socks5://[user:pass@]host:port
+    import re
+    m = re.match(r"socks5://(?:([^:]+):([^@]+)@)?([^:]+):(\d+)", p)
+    if m:
+        return ("socks5", m.group(3), int(m.group(4)), True, m.group(1), m.group(2))
     return None
 
 
@@ -69,6 +86,12 @@ async def sign_in(phone: str, code: str, phone_code_hash: str, password: str = "
         else:
             raise
     log("INFO", "tg", "Telegram 登录成功")
+    # 登录成功后把 session 字符串存下来，容器重建也能免验证恢复
+    try:
+        from telethon.sessions import StringSession
+        config.set("tg.session_string", StringSession.save(_client.session))
+    except Exception:
+        pass
     return True
 
 
