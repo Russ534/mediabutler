@@ -123,12 +123,18 @@ async def incremental_sync() -> dict:
 
     handled = 0
     total = 0
-    latest = int(get("pan115.life_cursor", "0") or 0)
+    cursor0 = int(get("pan115.life_cursor", "0") or 0)
+    latest = cursor0
     for g in groups:
+        g_time = 0
         try:
-            latest = max(latest, int(g.get("update_time") or 0))
+            g_time = int(g.get("update_time") or 0)
+            latest = max(latest, g_time)
         except (TypeError, ValueError):
             pass
+        # 组快照时间未超过游标 = 整组都是旧事件，直接跳过（item 级 life_events 去重兜底）
+        if cursor0 and g_time and g_time <= cursor0:
+            continue
         btype = str(g.get("behavior_type") or "")
         is_add = btype in _ADD_BEHAVIORS
         is_del = "delete" in btype or "del_" in btype
