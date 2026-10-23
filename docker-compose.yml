@@ -10,8 +10,8 @@ services:
     ports:
       - "8866:8866"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口（8788 是 wb-hub，别撞）
     volumes:
-      - "./config:/config"              # 数据库、TG session、Emby 图片缓存（必须持久化）
-      - "./media:/media"                # STRM 与元数据落地；Emby 媒体库挂载同一目录
+      - "/vol1/1000/Docker/mediabutler/config:/config"    # 数据库、TG session、缓存（必须持久化）
+      - "/vol3/1000/115观影/mediabutler:/media"           # STRM 落在 clouddrive 挂载下，Emby 容器内即 /media/mediabutler（飞牛实际约定，其他机器改成你的媒体路径）
     environment:
       - TZ=Asia/Shanghai
       # STRM 文件里写入的播放地址，必须是 Emby 容器能访问到本程序的地址
