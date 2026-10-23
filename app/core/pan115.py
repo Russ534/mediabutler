@@ -113,11 +113,11 @@ async def dir_getid(path: str) -> str:
 
 
 async def life_events(limit: int = 1000) -> dict:
-    """115 生活事件（增量同步数据源）。
-    返回 data.list 为「按行为/日期分组」的列表，每组含 behavior_type 与 items（文件明细）。
-    分页用 last_data（往回翻旧页），轮询场景只需取第一页 + DB 去重。"""
+    """115 生活事件（增量同步数据源）。show_type=1 只要文件系统操作（增删改/移动/上传/接收），
+    过滤掉 account_security 等无关事件。返回 data.list 为「按行为/日期分组」的列表，
+    每组含 behavior_type 与 items（文件明细）。轮询场景取第一页 + DB 去重即可。"""
     c = _client()
-    return await c.life_list({"limit": limit}, async_=True)
+    return await c.life_list({"limit": limit, "show_type": 1}, async_=True)
 
 
 async def share_receive(share_url: str, target_cid: str | int = 0) -> dict:

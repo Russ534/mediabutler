@@ -7,7 +7,7 @@ from .. import config
 from ..database import db, event, log
 from ..core import pan115, strm
 
-# 会产生「文件落入网盘」的生活事件行为类型（115 生活事件无删除类型，删除靠全量兜底）
+# 会产生「文件落入网盘」的生活事件行为类型；删除类行为名含 delete（show_type=1 已过滤无关事件）
 _ADD_BEHAVIORS = {"upload_file", "upload_image_file", "receive_files", "move_file", "move_image_file"}
 
 
@@ -122,7 +122,9 @@ async def incremental_sync() -> dict:
         except (TypeError, ValueError):
             pass
         btype = str(g.get("behavior_type") or "")
-        if btype not in _ADD_BEHAVIORS:
+        is_add = btype in _ADD_BEHAVIORS
+        is_del = "delete" in btype or "del_" in btype
+        if not (is_add or is_del):
             continue
         for it in g.get("items") or []:
             total += 1
@@ -140,7 +142,11 @@ async def incremental_sync() -> dict:
                 "VALUES(?,?,?,?,?,0,?)", (ev_id, btype, name, cid, fid, time.time()))
             route = routes.get(cid)
             ext = Path(name).suffix.lower()
-            if route and ext in pan115.VIDEO_EXT and pickcode:
+            if is_del:
+                if fid:
+                    strm.remove_strm(fid)
+                    handled += 1
+            elif route and ext in pan115.VIDEO_EXT and pickcode:
                 local_dir, rel = route
                 local = strm.write_strm(local_dir, name, pickcode, rel=rel)
                 old = d.execute("SELECT local_path FROM strm_files WHERE pan_fid=?", (fid,)).fetchone()
