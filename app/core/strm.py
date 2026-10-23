@@ -18,9 +18,13 @@ def strm_url(pickcode: str, filename: str) -> str:
     return f"{host.rstrip('/')}/stream/{pickcode}/{safe_name(filename)}"
 
 
-def write_strm(local_dir: str, filename: str, pickcode: str) -> str:
-    """写 .strm 文件，返回本地路径。"""
+def write_strm(local_dir: str, filename: str, pickcode: str, rel: str = "") -> str:
+    """写 .strm 文件，返回本地路径。rel 为相对 local_dir 的子目录（还原网盘层级）。"""
     d = Path(config.MEDIA_ROOT) / local_dir.lstrip("/")
+    if rel:
+        for seg in rel.split("/"):
+            if seg:
+                d = d / safe_name(seg)
     d.mkdir(parents=True, exist_ok=True)
     stem = safe_name(Path(filename).stem)
     p = d / f"{stem}.strm"

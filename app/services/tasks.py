@@ -65,7 +65,7 @@ async def job_checkin115() -> str:
 async def job_checkin_hdhive() -> str:
     r = await hdhive.checkin()
     data = r.get("data") or {}
-    msg = f"影巢签到: {data.get('message') or r.get('message') or r}"
+    msg = f"影巢签到: {r.get('error') or data.get('message') or r.get('message') or r}"
     await notify.send(msg, "每日签到")
     return msg
 
@@ -96,7 +96,7 @@ async def job_douban(cfg: dict) -> str:
                                  source="douban")
                 added += 1
         except Exception as e:
-            log("WARN", "douban", f"《{it['title']}》TMDB 匹配失败: {e}")
+            log("WARN", "douban", f"《{it['title']}》TMDB 匹配失败: {type(e).__name__}: {e}")
         await asyncio.sleep(0.3)
     msg = f"豆瓣同步: 抓取 {len(items)} 条，新增订阅 {added}"
     event("douban_sync", {"fetched": len(items), "added": added})

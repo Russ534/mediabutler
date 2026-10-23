@@ -238,6 +238,7 @@ async function loadResources() {
 const SETTING_GROUPS = [
   ['Emby', ['emby.host|Emby 地址（如 http://192.168.1.10:8096）', 'emby.api_key|Emby API Key']],
   ['TMDB', ['tmdb.api_key|TMDB API Key', 'tmdb.proxy|TMDB 代理（可选）']],
+  ['网络', ['net.proxy|全局兜底代理（可选，http:// 或 socks5://）']],
   ['豆瓣', ['douban.user_id|豆瓣用户 ID', 'douban.cookie|豆瓣 Cookie', 'douban.user_agent|User-Agent']],
   ['115 网盘', ['pan115.cookie|115 Cookie（浏览器 F12 复制）']],
   ['影巢 HDHive', ['hdhive.base_url|影巢 API 地址（现 re0.me）', 'hdhive.api_key|影巢 API Key（re0.me 个人设置生成）', 'hdhive.proxy|影巢代理（CF 拦截时需走代理）', 'hdhive.gambler|赌狗签到 true/false']],

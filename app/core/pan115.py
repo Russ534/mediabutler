@@ -38,8 +38,9 @@ async def list_dir(cid: str | int = 0, limit: int = 1000, offset: int = 0, asc: 
     return await c.fs_files(payload, async_=True)
 
 
-async def walk(cid: str | int, _depth: int = 0, _max_depth: int = 12):
-    """递归遍历目录，yield 文件/目录条目（dict）。目录条目含 'is_dir'=True。"""
+async def walk(cid: str | int, _depth: int = 0, _max_depth: int = 12, _rel: str = ""):
+    """递归遍历目录，yield 文件/目录条目（dict）。目录条目含 'is_dir'=True。
+    每个条目带 'rel'：相对遍历起点的所在目录路径（不含自身文件名）。"""
     offset = 0
     while True:
         try:
@@ -52,16 +53,15 @@ async def walk(cid: str | int, _depth: int = 0, _max_depth: int = 12):
             return
         for it in items:
             fid = str(it.get("fid") or it.get("cid") or "")
-            is_dir = "cid" in it or it.get("fc") == "0" or (it.get("s") == 0 and not it.get("pc"))
             # p115 fs_files: 目录没有 pc 字段
             is_dir = not it.get("pc")
             name = it.get("n") or it.get("fn") or ""
             entry = {"fid": fid, "name": name, "size": int(it.get("s") or 0),
                      "pickcode": it.get("pc") or "", "sha1": it.get("sha") or it.get("sha1") or "",
-                     "cid": str(cid), "is_dir": is_dir}
+                     "cid": str(cid), "is_dir": is_dir, "rel": _rel}
             yield entry
             if is_dir and _depth < _max_depth:
-                async for sub in walk(fid, _depth + 1, _max_depth):
+                async for sub in walk(fid, _depth + 1, _max_depth, f"{_rel}/{name}" if _rel else name):
                     yield sub
         if len(items) < 1150:
             return
@@ -112,13 +112,12 @@ async def dir_getid(path: str) -> str:
     return str((r.get("data") or {}).get("id") or r.get("id") or "0")
 
 
-async def life_events(cursor: int = 0, limit: int = 1000) -> dict:
-    """115 生活事件（增量同步数据源）。返回含 list 与最新 cursor。"""
+async def life_events(limit: int = 1000) -> dict:
+    """115 生活事件（增量同步数据源）。
+    返回 data.list 为「按行为/日期分组」的列表，每组含 behavior_type 与 items（文件明细）。
+    分页用 last_data（往回翻旧页），轮询场景只需取第一页 + DB 去重。"""
     c = _client()
-    payload: dict = {"limit": limit}
-    if cursor:
-        payload["cursor"] = cursor
-    return await c.life_list(payload, async_=True)
+    return await c.life_list({"limit": limit}, async_=True)
 
 
 async def share_receive(share_url: str, target_cid: str | int = 0) -> dict:

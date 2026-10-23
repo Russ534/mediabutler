@@ -94,6 +94,12 @@ CREATE TABLE IF NOT EXISTS life_events(
   handled INTEGER DEFAULT 0,
   created_at REAL
 );
+CREATE TABLE IF NOT EXISTS sync_dirs(
+  sync_path_id INTEGER NOT NULL,       -- 所属同步路径
+  pan_cid TEXT NOT NULL,               -- 115 目录 cid
+  rel TEXT NOT NULL DEFAULT '',        -- 相对同步根的目录路径（不含文件名）
+  PRIMARY KEY(sync_path_id, pan_cid)
+);
 CREATE TABLE IF NOT EXISTS organize_rules(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,

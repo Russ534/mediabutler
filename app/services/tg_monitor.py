@@ -96,16 +96,27 @@ async def sign_in(phone: str, code: str, phone_code_hash: str, password: str = "
 
 
 async def dialogs() -> list[dict]:
-    """对话列表（频道/群组/机器人），供监控规则下拉选择。"""
+    """对话列表（频道/群组/机器人），供监控规则下拉选择。
+    Telethon 长连接偶发 TL 流错位（TypeNotFoundError），出错时返回已取部分并重置连接。"""
     c = await get_client()
     if not c:
         return []
     out = []
-    async for d in c.iter_dialogs(limit=300):
-        out.append({"id": d.id, "name": d.name or "",
-                    "type": "channel" if getattr(d.entity, "broadcast", False)
-                    else "group" if getattr(d.entity, "megagroup", False)
-                    else "bot" if getattr(d.entity, "bot", False) else "user"})
+    try:
+        async for d in c.iter_dialogs(limit=300):
+            out.append({"id": d.id, "name": d.name or "",
+                        "type": "channel" if getattr(d.entity, "broadcast", False)
+                        else "group" if getattr(d.entity, "megagroup", False)
+                        else "bot" if getattr(d.entity, "bot", False) else "user"})
+    except Exception as e:
+        log("WARN", "tg", f"对话列表解析中断（已取 {len(out)} 条），重置连接: {type(e).__name__}")
+        global _client
+        try:
+            await c.disconnect()
+        except Exception:
+            pass
+        if _client is c:
+            _client = None
     return out
 
 

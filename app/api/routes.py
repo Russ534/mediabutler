@@ -402,28 +402,40 @@ async def save_settings(body: SettingsBody, authorization: str = Header("")):
 async def test_emby(authorization: str = Header("")):
     _auth(authorization)
     from ..core import emby
-    return await emby.test()
+    try:
+        return await emby.test()
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 @router.post("/test/pan115")
 async def test_115(authorization: str = Header("")):
     _auth(authorization)
     from ..core import pan115
-    return await pan115.test()
+    try:
+        return await pan115.test()
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 @router.post("/test/hdhive")
 async def test_hdhive(authorization: str = Header("")):
     _auth(authorization)
     from ..core import hdhive
-    return await hdhive.ping()
+    try:
+        return await hdhive.ping()
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 @router.post("/test/notify")
 async def test_notify(authorization: str = Header("")):
     _auth(authorization)
     from ..core.notify import send
-    return {"ok": await send("这是一条测试通知", "MediaButler")}
+    try:
+        return {"ok": await send("这是一条测试通知", "MediaButler")}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 @router.post("/test/ai")
@@ -439,8 +451,11 @@ async def test_ai(authorization: str = Header("")):
 async def test_pansou(q: str = "流浪地球", authorization: str = Header("")):
     _auth(authorization)
     from ..core.pansearch import search_all
-    rs = await search_all(q)
-    return {"total": len(rs), "items": rs[:10]}
+    try:
+        rs = await search_all(q)
+        return {"total": len(rs), "items": rs[:10]}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 # ---------- 日志 ----------

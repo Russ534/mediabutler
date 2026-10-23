@@ -21,11 +21,23 @@ def _client(timeout: float = 20.0):
     return client("hdhive.proxy", timeout=timeout)
 
 
+def _err(e: Exception) -> dict:
+    return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 async def ping() -> dict:
-    async with _client(15) as c:
-        r = await c.get(_base() + "/ping", headers=_headers())
-        r.raise_for_status()
-        return r.json()
+    if not config.get("hdhive.api_key"):
+        return {"ok": False, "error": "未配置影巢 API Key（re0.me → 个人设置 → 开放接口生成）"}
+    try:
+        async with _client(15) as c:
+            r = await c.get(_base() + "/ping", headers=_headers())
+        if r.status_code == 200:
+            j = r.json()
+            j["ok"] = True
+            return j
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return _err(e)
 
 
 async def me() -> dict:
@@ -36,13 +48,21 @@ async def me() -> dict:
 
 
 async def checkin(gambler: bool | None = None) -> dict:
-    """每日签到。gambler=True 赌狗模式（-3~+30），默认普通（+4~+10）。"""
+    """每日签到。gambler=True 赌狗模式（-3~+30），默认普通（+4~+10）。失败不抛异常。"""
     if gambler is None:
         gambler = config.get("hdhive.gambler") == "true"
-    async with _client(20) as c:
-        r = await c.post(_base() + "/checkin", headers=_headers(), json={"is_gambler": gambler})
-        r.raise_for_status()
-        return r.json()
+    if not config.get("hdhive.api_key"):
+        return {"ok": False, "error": "未配置影巢 API Key"}
+    try:
+        async with _client(20) as c:
+            r = await c.post(_base() + "/checkin", headers=_headers(), json={"is_gambler": gambler})
+        j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        if r.status_code == 200:
+            j["ok"] = True
+            return j
+        return {"ok": False, "error": j.get("message") or f"HTTP {r.status_code}"}
+    except Exception as e:
+        return _err(e)
 
 
 async def resources(media_type: str, tmdb_id: int) -> list[dict]:
