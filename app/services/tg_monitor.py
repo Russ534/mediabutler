@@ -160,12 +160,33 @@ async def start_listener() -> None:
 
     d = db()
     channel_ids: set[int] = set()
-    for r in d.execute("SELECT channel_ids FROM tg_rules WHERE enabled=1").fetchall():
+    for r in d.execute("SELECT id, channel_ids FROM tg_rules WHERE enabled=1").fetchall():
+        resolved: list = []
+        changed = False
         for i in json.loads(r["channel_ids"]):
             try:
                 channel_ids.add(int(i))
+                resolved.append(int(i))
+                continue
             except (TypeError, ValueError):
                 pass
+            # 接管自 CMS 的 URL/用户名形式（t.me/xxx）→ 解析为数字 id 并回写
+            uname = str(i).rstrip("/").split("/")[-1].lstrip("@")
+            if not uname:
+                continue
+            try:
+                ent = await c.get_entity(uname)
+                channel_ids.add(ent.id)
+                resolved.append(ent.id)
+                changed = True
+                log("INFO", "tg", f"频道解析: {i} → {ent.id}")
+            except Exception as e:
+                resolved.append(i)  # 保留原值，下次启动再试
+                log("WARN", "tg", f"频道解析失败 {i}: {type(e).__name__}: {e}")
+        if changed:
+            d.execute("UPDATE tg_rules SET channel_ids=? WHERE id=?",
+                      (json.dumps(resolved), r["id"]))
+    d.commit()
     if not channel_ids:
         log("INFO", "tg", "暂无启用的监控规则，监听待命")
     log("INFO", "tg", f"TG 监听启动，覆盖 {len(channel_ids)} 个频道/群组")
