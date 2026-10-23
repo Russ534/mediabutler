@@ -33,8 +33,61 @@ $$('.sidebar nav a').forEach(a => a.onclick = () => {
   $$('.page').forEach(p => p.classList.remove('active'));
   $('#page-' + a.dataset.page).classList.add('active');
   ({ dashboard: loadDashboard, subs: loadSubs, tg: loadTg, sync: loadSync, organize: loadOrg,
-     tasks: loadTasks, resources: loadResources, settings: loadSettings, logs: loadLogs })[a.dataset.page]();
+     tasks: loadTasks, resources: loadResources, settings: loadSettings, logs: loadLogs,
+     legacy: loadLegacy })[a.dataset.page]();
 });
+
+/* ---------- 数据接管 ---------- */
+async function loadLegacy() {
+  const r = await api('/rules/word');
+  $('#word-rules').value = r.text || '';
+}
+
+async function legacyPreview() {
+  const box = $('#legacy-result');
+  box.innerHTML = '<p class="tip">扫描中…</p>';
+  try {
+    const p = await api('/legacy/preview');
+    box.innerHTML = `<div class="card"><h3>可接管资产</h3><ul>
+      <li>CMS 数据库：${p.cms_db ? '✅ 找到' : '❌ 未找到（检查 /media 挂载）'}</li>
+      <li>云端文件索引：<b>${p.cloud_rows}</b> 行</li>
+      <li>CMS 订阅：${p.cms_subs} 条</li>
+      <li>CMS TG 频道：${(p.cms_tg_channels || []).join('、') || '无'}</li>
+      <li>规则文件：分类 ${p.cms_rules.category ? '✅' : '❌'} / 洗版 ${p.cms_rules.tidy ? '✅' : '❌'} / 词表 ${p.cms_rules.words ? '✅' : '❌'}</li>
+      <li>chill RSS 订阅映射：<b>${p.chill_rss}</b> 条（${(p.chill_rss_tasks || []).join('、')}）</li>
+    </ul></div>`;
+  } catch (e) { box.innerHTML = `<p class="tip">扫描失败: ${e.message}</p>`; }
+}
+
+async function legacyImport() {
+  if (!confirm('确认接管？只读老容器数据，导入后 MediaButler 的订阅/规则即与现网一致。')) return;
+  const box = $('#legacy-result');
+  box.innerHTML = '<p class="tip">导入中（50 万行索引约需 1-2 分钟）…</p>';
+  try {
+    const r = await api('/legacy/import', { method: 'POST' });
+    box.innerHTML = `<div class="card"><h3>接管完成</h3><ul>
+      <li>云端索引：${r.cloud_index} 行</li><li>CMS 订阅：${r.subscriptions} 条</li>
+      <li>TG 监控规则：${r.tg_rules} 条</li><li>chill RSS 订阅：${r.chill_subs} 条</li>
+      <li>跳过（已存在）：${r.skipped} 条</li><li>规则接管：${(r.rules || []).join('、') || '无'}</li>
+      ${(r.errors || []).length ? `<li style="color:red">错误：${r.errors.join('；')}</li>` : ''}
+    </ul></div>`;
+  } catch (e) { box.innerHTML = `<p class="tip">导入失败: ${e.message}</p>`; }
+}
+
+async function saveWordRules() {
+  await api('/rules/word', { method: 'POST', body: JSON.stringify({ text: $('#word-rules').value }) });
+  alert('词表已保存');
+}
+
+async function syncCleanup() {
+  if (!confirm('将删除云端已不存在的本地 STRM 并回收空目录，继续？')) return;
+  const box = $('#cleanup-result');
+  box.innerHTML = '<p class="tip">清理中…</p>';
+  try {
+    const r = await api('/sync/cleanup', { method: 'POST' });
+    box.innerHTML = `<p>✅ 检查 ${r.checked} 条，删除死链 STRM ${r.removed_strm} 个，回收空目录 ${r.removed_dirs} 个</p>`;
+  } catch (e) { box.innerHTML = `<p class="tip">失败: ${e.message}</p>`; }
+}
 
 /* ---------- 仪表盘 ---------- */
 async function loadDashboard() {
@@ -236,7 +289,7 @@ async function loadResources() {
 
 /* ---------- 设置 ---------- */
 const SETTING_GROUPS = [
-  ['Emby', ['emby.host|Emby 地址（如 http://192.168.1.10:8096）', 'emby.api_key|Emby API Key']],
+  ['Emby', ['emby.host|Emby 地址（如 http://192.168.1.10:8096）', 'emby.api_key|Emby API Key', 'emby.deep_delete|深度删除 true/false（Emby 删 STRM 联动删网盘）']],
   ['TMDB', ['tmdb.api_key|TMDB API Key', 'tmdb.proxy|TMDB 代理（可选）']],
   ['网络', ['net.proxy|全局兜底代理（可选，http:// 或 socks5://）']],
   ['豆瓣', ['douban.user_id|豆瓣用户 ID', 'douban.cookie|豆瓣 Cookie', 'douban.user_agent|User-Agent']],

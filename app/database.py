@@ -130,6 +130,25 @@ CREATE TABLE IF NOT EXISTS events(
   type TEXT, payload TEXT DEFAULT '{}', created_at REAL
 );
 CREATE INDEX IF NOT EXISTS idx_events_time ON events(created_at);
+-- 115 云端文件索引（全量同步/接管 CMS cloud_data 后作为「云端真相」，用于无效清理与增量基线）
+CREATE TABLE IF NOT EXISTS cloud_index(
+  fid TEXT PRIMARY KEY,
+  pid TEXT DEFAULT '',
+  name TEXT,
+  full_path TEXT,                  -- 网盘内完整路径 /Media/Video/...
+  pickcode TEXT DEFAULT '',
+  sha1 TEXT DEFAULT '',
+  size INTEGER DEFAULT 0,
+  is_dir INTEGER DEFAULT 0,
+  updated_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_cloud_pid ON cloud_index(pid);
+CREATE INDEX IF NOT EXISTS idx_cloud_pick ON cloud_index(pickcode);
+-- 接管迁移记录
+CREATE TABLE IF NOT EXISTS legacy_imports(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT, kind TEXT, detail TEXT DEFAULT '{}', created_at REAL
+);
 """
 
 

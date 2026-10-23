@@ -26,6 +26,7 @@
       <a data-page="subs">📺 订阅管理</a>
       <a data-page="tg">📡 TG 监控</a>
       <a data-page="sync">☁️ STRM 同步</a>
+      <a data-page="legacy">📥 数据接管</a>
       <a data-page="organize">🗂️ 网盘整理</a>
       <a data-page="tasks">⏰ 定时任务</a>
       <a data-page="resources">📦 资源记录</a>
@@ -90,6 +91,21 @@
       <input id="pan-cid" placeholder="目录 cid，默认 0=根目录" value="0">
       <button onclick="browsePan()">浏览</button>
       <div id="pan-list"></div>
+    </section>
+
+    <section id="page-legacy" class="page">
+      <h2>数据接管 <button class="btn-sm" onclick="legacyPreview()">🔍 扫描可接管资产</button>
+        <button class="btn-sm danger" onclick="legacyImport()">⚡ 一键接管</button></h2>
+      <p class="tip">从飞牛上的 CMS / CineChill 存量数据导入：云端文件索引（50万行，增量同步基线）、订阅清单、TG 监控频道、分类规则、洗版策略、识别词表、chill RSS 订阅映射。只读老数据，不影响老容器。</p>
+      <div id="legacy-result"></div>
+      <h3>识别词表（CMS words_replace + Symedia 识别词语法）</h3>
+      <p class="tip">一行一条：<code>屏蔽词</code> / <code>旧 => 新</code> / <code>正则 => tmdb=12345</code> / <code>正则 => {[tmdbid=45790;type=tv;s=1;e=1]}</code> / <code>第 &lt;&gt; 集 &gt;&gt; EP+1</code></p>
+      <textarea id="word-rules" rows="10" style="width:100%"></textarea>
+      <button class="primary" onclick="saveWordRules()">💾 保存词表</button>
+      <h3>无效清理</h3>
+      <p class="tip">删除「本地有 STRM 但 115 云端已不存在」的死链，并回收空目录（需云端索引已建立：接管数据或跑过全量同步）。</p>
+      <button class="btn-sm danger" onclick="syncCleanup()">🧹 执行无效清理</button>
+      <div id="cleanup-result"></div>
     </section>
 
     <section id="page-organize" class="page">

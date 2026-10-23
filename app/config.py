@@ -22,6 +22,7 @@ _DEFAULTS = {
     # emby
     "emby.host": "",
     "emby.api_key": "",
+    "emby.deep_delete": "false",
     # tmdb
     "tmdb.api_key": "",
     "tmdb.proxy": "",
@@ -57,6 +58,12 @@ _DEFAULTS = {
     # 通知
     "notify.wecom_webhook": "",
     "notify.webhook": "",
+    # CMS 兼容：旧 STRM（http://host:9527/d/<pickcode>）接管开关
+    "compat.cms_9527": "false",
+    # 网盘分类规则（CMS category.yaml 语义，文本编辑）
+    "organize.category_yaml": "",
+    # 洗版策略（CMS tidy.yaml 语义）
+    "wash.tidy_yaml": "",
     # 网络代理（全局兜底）
     "net.proxy": "",
 }

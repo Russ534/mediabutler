@@ -56,6 +56,19 @@ sudo docker compose logs -f mediabutler   # 首次启动日志里打印初始密
 - **Webhook**：Emby 通知里加 Webhook 指向 `http://飞牛IP:8866/api/webhook/emby`，入库即刷新订阅状态。
 - **图片加速**（可选）：把 Emby 前端图片请求反代到 `http://飞牛IP:8866/emby/...`，自带磁盘缓存。
 
+
+## v2.0 数据接管与增强（站在 CMS/CineChill/Symedia 肩膀上）
+
+- **数据接管**：一键导入飞牛上 CMS 的云端文件索引（50 万行，做增量同步基线与无效清理对照）、订阅清单、TG 监控频道、分类规则（category.yaml）、洗版策略（tidy.yaml）、识别词表（words_replace.txt），以及 CineChill 的 RSS 订阅映射。页面：「数据接管」。
+- **CMS 9527 兼容路由**：`/d/<pickcode>` 直兼容 CMS 旧 STRM 格式。CMS 退役后在 compose 里加 `9527:8866` 端口映射，28 万存量 STRM 不死链。
+- **分类与命名**：整理输出与现网目录树完全一致（电影/华语电影/片名 (年份) {tmdb=ID}，电视剧/国产剧/…/Season 01），新旧数据无缝混排。
+- **识别词表**：屏蔽词 / `旧 => 新` / `正则 => tmdb=ID` / `{[tmdbid=;type=;s=;e=]}` 直指定 / `第 <> 集 >> EP+1` 集数偏移（兼容 Symedia 语法）。
+- **洗版策略引擎**：tidy.yaml 优先级规则（resource_pix/type/effect/team，! 排除），洗版期订阅按策略评分决定收不收。
+- **无效清理**：删除「本地有 STRM 但云端已消失」的死链 + 回收空目录。
+- **深度删除**（`emby.deep_delete=true`）：Emby 里删除 STRM 时联动删除 115 云端文件（进回收站）。
+- **富文本入库通知**：评分/类型/首播/集数/缺集/简介/TMDB 链接（CineChill 风格）。
+- **识别细节**：过滤文件大小、去数字前缀二次识别、TMDB 结果按人气排序（Symedia 发行说明里的打磨点）。
+
 ## 环境变量
 
 | 变量 | 默认 | 说明 |

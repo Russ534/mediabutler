@@ -37,6 +37,26 @@ async def stream(pickcode: str, filename: str):
         return Response(f"直链获取失败: {e}", status_code=502)
 
 
+@router.get("/d/{pickcode}")
+async def stream_cms_compat(pickcode: str):
+    """CMS 9527 兼容路由：旧 STRM 内容为 http://host:9527/d/<pickcode>?/<name>，
+    接管 CMS 退役后 28 万存量 STRM 不死链（compose 映射 9527:8866 即可）。"""
+    import time
+    cached = _url_cache.get(pickcode)
+    if cached and cached[1] > time.time():
+        return RedirectResponse(cached[0], status_code=302)
+    try:
+        from ..core.pan115 import download_url
+        url = await download_url(pickcode)
+        _url_cache[pickcode] = (url, time.time() + URL_CACHE_TTL)
+        if len(_url_cache) > 5000:
+            _url_cache.clear()
+        return RedirectResponse(url, status_code=302)
+    except Exception as e:
+        log("ERROR", "gateway", f"兼容路由直链失败 pickcode={pickcode}: {e}")
+        return Response(f"直链获取失败: {e}", status_code=502)
+
+
 @router.api_route("/emby/{path:path}", methods=["GET", "HEAD"])
 async def emby_proxy(path: str, request: Request):
     """Emby 反代：图片走磁盘缓存，其余透传。"""

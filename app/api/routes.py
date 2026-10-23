@@ -357,6 +357,53 @@ async def del_tg_rule(rid: int, authorization: str = Header("")):
     d.execute("DELETE FROM tg_rules WHERE id=?", (rid,))
     d.commit()
     await _restart_tg()
+
+
+# ---------- 数据接管（CMS / CineChill 存量导入） ----------
+
+@router.get("/legacy/preview")
+async def legacy_preview(authorization: str = Header("")):
+    _auth(authorization)
+    from ..services import legacy_import
+    return legacy_import.preview()
+
+
+@router.post("/legacy/import")
+async def legacy_do_import(authorization: str = Header("")):
+    _auth(authorization)
+    from ..services import legacy_import
+    import asyncio
+    # 50 万行导入较慢，放后台跑，结果看事件日志
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, legacy_import.import_all)
+
+
+@router.post("/sync/cleanup")
+async def sync_cleanup(authorization: str = Header("")):
+    """无效清理：删本地有但云端已消失的 STRM，回收空目录。"""
+    _auth(authorization)
+    from ..services.sync115 import cleanup_invalid
+    return await cleanup_invalid()
+
+
+@router.get("/rules/word")
+async def get_word_rules(authorization: str = Header("")):
+    _auth(authorization)
+    p = config.BASE_DIR / "word_rules.txt"
+    return {"text": p.read_text(encoding="utf-8") if p.exists() else ""}
+
+
+class WordRulesBody(BaseModel):
+    text: str
+
+
+@router.post("/rules/word")
+async def save_word_rules(body: WordRulesBody, authorization: str = Header("")):
+    _auth(authorization)
+    (config.BASE_DIR / "word_rules.txt").write_text(body.text, encoding="utf-8")
+    from ..core import wordrules
+    wordrules.reload(force=True)
+    return {"ok": True}
     return {"ok": True}
 
 
@@ -484,6 +531,15 @@ async def emby_webhook(request: Request):
     payload = await request.json()
     from ..core.emby import parse_webhook
     from ..services.subscribe import refresh_all_missing
+    # 深度删除：Emby 里删除 STRM 时联动删除 115 云端文件（Symedia 神医插件同款）
+    event_name = str(payload.get("Event") or payload.get("event") or "")
+    item = payload.get("Item") or {}
+    item_path = str(item.get("Path") or "")
+    if event_name in ("ItemDeleted", "library.item.deleted", "item.deleted") and item_path.endswith(".strm"):
+        if config.get("emby.deep_delete", "false") == "true":
+            import asyncio
+            asyncio.create_task(_deep_delete(item_path))
+        return {"ok": True}
     info = parse_webhook(payload)
     if info:
         log("INFO", "webhook", f"Emby 入库: {info['title']} (tmdb={info['tmdb_id']})")
@@ -491,3 +547,21 @@ async def emby_webhook(request: Request):
         import asyncio
         asyncio.create_task(refresh_all_missing())
     return {"ok": True}
+
+
+async def _deep_delete(local_path: str) -> None:
+    """按本地 strm 路径找到云端文件并删除（进 115 回收站，可恢复）。"""
+    d = db()
+    row = d.execute("SELECT pan_fid FROM strm_files WHERE local_path=?", (local_path,)).fetchone()
+    if not row:
+        log("WARN", "webhook", f"深度删除未命中索引: {local_path}")
+        return
+    try:
+        from ..core import pan115
+        await pan115.delete([row["pan_fid"]])
+        d.execute("DELETE FROM strm_files WHERE pan_fid=?", (row["pan_fid"],))
+        d.execute("DELETE FROM cloud_index WHERE fid=?", (row["pan_fid"],))
+        d.commit()
+        log("INFO", "webhook", f"深度删除完成: {local_path} → 云端 fid={row['pan_fid']}")
+    except Exception as e:
+        log("ERROR", "webhook", f"深度删除失败: {type(e).__name__}: {e}")

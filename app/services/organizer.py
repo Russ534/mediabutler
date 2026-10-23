@@ -49,31 +49,46 @@ async def organize_once(rule_id: int) -> dict:
 
 
 async def _resolve_dest(rule, item: dict, parsed: dict, ext: str) -> tuple[str, str]:
-    """解析目标目录与新文件名。返回 (cid, new_name)，cid 为空表示跳过。"""
+    """解析目标目录与新文件名。返回 (cid, new_name)，cid 为空表示跳过。
+    目录结构接管 CMS 线上约定：电影/电视剧 → 二级分类 → 片名 (年份) {tmdb=ID} → Season 01。"""
+    from ..core import category
     guess = parsed["title_guess"]
     year = parsed["year"]
-    media_type = rule["media_type"]
-    # TMDB 搜索修正标题
+    tmdb_id = parsed.get("tmdb_id")
+    media_type = parsed.get("media_type") or rule["media_type"]
+    detail: dict = {}
+    # TMDB 搜索修正标题（词表直指定 tmdb_id 时跳过搜索）
     if config_tmdb_available():
         try:
-            results = await tmdb.search(guess, "multi")
-            if results:
-                best = results[0]
-                guess = best["title"] or guess
-                year = best["year"] or year
-                media_type = best["media_type"] if media_type == "auto" else media_type
-        except Exception:
-            pass
-    if media_type == "auto":
+            if tmdb_id:
+                detail = await tmdb.detail(media_type if media_type in ("movie", "tv") else "movie", tmdb_id)
+            else:
+                results = await tmdb.search(guess, "multi")
+                if results:
+                    best = results[0]
+                    tmdb_id = best.get("tmdb_id") or best.get("id")
+                    media_type = best["media_type"] if media_type in ("auto", None) else media_type
+                    if tmdb_id:
+                        detail = await tmdb.detail(best["media_type"], tmdb_id)
+            if detail:
+                guess = detail.get("title") or detail.get("name") or guess
+                year = (detail.get("release_date") or detail.get("first_air_date") or year or "")[:4]
+                if media_type in ("auto", None):
+                    media_type = "movie" if detail.get("release_date") else "tv"
+        except Exception as e:
+            log("WARN", "organize", f"TMDB 匹配失败 {guess}: {type(e).__name__}: {e}")
+    if media_type in ("auto", None):
         media_type = "tv" if parsed["season"] is not None or parsed["episodes"] else "movie"
-    # 目标路径：target_cid / 类型分类 / 剧名 (年份)
-    parts = []
-    if media_type == "tv":
-        parts.append("剧集")
-    elif media_type == "movie":
-        parts.append("电影")
-    title_dir = f"{guess} ({year})" if year else guess
-    parts.append(title_dir)
+    # 分类：CMS category.yaml 语义（动画/华语/外语；国产剧/日番/欧美剧…）
+    if detail:
+        cat_path = category.classify(media_type, detail)
+    else:
+        cat_path = "电视剧/未分类" if media_type == "tv" else "电影/外语电影"
+    suffix = f" {{tmdb={tmdb_id}}}" if tmdb_id else ""
+    title_dir = f"{guess} ({year}){suffix}" if year else f"{guess}{suffix}"
+    parts = cat_path.split("/") + [title_dir]
+    if media_type == "tv" and parsed["season"]:
+        parts.append(f"Season {parsed['season']:02d}")
     dest_cid = await pan115.ensure_dir(parts, root=rule["target_cid"])
     # 新文件名
     if media_type == "tv" and parsed["season"] is not None:
@@ -85,7 +100,7 @@ async def _resolve_dest(rule, item: dict, parsed: dict, ext: str) -> tuple[str, 
             ep = f"S{parsed['season']:02d}"
         new_name = f"{guess}.{ep}.{parsed['resolution'] or ''}{ext}".replace("..", ".").strip(".")
     else:
-        new_name = f"{title_dir}{ext}"
+        new_name = f"{guess} ({year}){ext}" if year else f"{guess}{ext}"
     return dest_cid, new_name
 
 

@@ -25,12 +25,21 @@ RE_LINK = re.compile(
 
 # 常见广告/垃圾行
 RE_AD = re.compile(r"(订阅|关注|加入|频道|群组|t\.me/joinchat|广告|推广|招代理|联系|客服|官方)")
+# 文件大小信息（Symedia 识别细节：过滤大小提高准确率）
+RE_SIZE = re.compile(r"[\[(\s]?\d+(?:\.\d+)?\s*(?:GB|MB|TB|GiB|MiB)[\])\s]?", re.I)
+# 数字前缀（如「01.雷神2」「02 - xxx」，二次识别时去除）
+RE_NUM_PREFIX = re.compile(r"^\s*\d{1,3}\s*[.、\-]\s*")
 
 
 def parse_title(title: str) -> dict:
-    """本地正则解析。"""
-    r: dict = {"raw": title, "season": None, "episodes": [], "resolution": "",
-               "codec": "", "source": "", "year": "", "title_guess": ""}
+    """本地正则解析。先应用识别词表（屏蔽/替换/tmdb直指定/集数偏移）。"""
+    from . import wordrules
+    wr = wordrules.apply(title)
+    title = wr["title"]
+    title = RE_SIZE.sub(" ", title)
+    r: dict = {"raw": title, "season": wr["season"], "episodes": [], "resolution": "",
+               "codec": "", "source": "", "year": "", "title_guess": "",
+               "tmdb_id": wr["tmdb_id"], "media_type": wr["media_type"]}
     m = RE_SEASON_EP.search(title)
     if m:
         r["season"] = int(m.group(1))
@@ -39,11 +48,13 @@ def parse_title(title: str) -> dict:
         r["episodes"] = list(range(min(e1, e2), max(e1, e2) + 1))
     else:
         m = RE_SEASON_ONLY.search(title)
-        if m:
+        if m and r["season"] is None:
             r["season"] = int(m.group(1) or m.group(2))
         m = RE_EP_ONLY.search(title)
         if m and not r["episodes"]:
             r["episodes"] = [int(m.group(1) or m.group(2))]
+    if wr["episode"] is not None:
+        r["episodes"] = [wr["episode"]]
     m = RE_RES.search(title)
     if m:
         r["resolution"] = m.group(1).upper().replace("2160P", "4K")
@@ -56,13 +67,15 @@ def parse_title(title: str) -> dict:
     m = RE_YEAR.search(title)
     if m:
         r["year"] = m.group(1)
-    # 粗猜标题：去掉方括号标签后取第一段
+    # 粗猜标题：去掉方括号标签后取第一段；数字前缀在二次猜测时剥掉
     clean = re.sub(r"[\[\]【】()（）]", " ", title)
     clean = RE_SEASON_EP.sub(" ", clean)
     clean = RE_SEASON_ONLY.sub(" ", clean)
     clean = RE_RES.sub(" ", clean)
     parts = [p.strip() for p in re.split(r"\s{2,}|[.·|｜]", clean) if len(p.strip()) >= 2]
-    r["title_guess"] = parts[0][:40] if parts else title[:40]
+    guess = parts[0][:40] if parts else title[:40]
+    stripped = RE_NUM_PREFIX.sub("", guess).strip()
+    r["title_guess"] = stripped or guess
     return r
 
 

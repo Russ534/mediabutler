@@ -106,6 +106,12 @@ async def rename(fid: str | int, new_name: str) -> dict:
     return await c.fs_rename((fid, new_name), async_=True)
 
 
+async def delete(file_ids: list[str]) -> dict:
+    """删除网盘文件（进回收站）。深度删除联动用。"""
+    c = _client()
+    return await c.fs_delete({"file_ids": ",".join(str(i) for i in file_ids)}, async_=True)
+
+
 async def dir_getid(path: str) -> str:
     c = _client()
     r = await c.fs_dir_getid({"path": path}, async_=True)

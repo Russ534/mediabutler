@@ -9,9 +9,12 @@ services:
     network_mode: bridge
     ports:
       - "8866:8866"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口（8788 是 wb-hub，别撞）
+      # CMS 退役后取消注释下一行，MediaButler 接管 9527，28 万存量 STRM（/d/<pickcode> 格式）不死链
+      # - "9527:8866"
     volumes:
       - "/vol1/1000/Docker/mediabutler/config:/config"    # 数据库、TG session、缓存（必须持久化）
-      - "/vol3/1000/115观影/mediabutler:/media"           # STRM 落在 clouddrive 挂载下，Emby 容器内即 /media/mediabutler（飞牛实际约定，其他机器改成你的媒体路径）
+      # 挂整个 115观影（与 CMS 同规）：STRM 写 /media/mediabutler，数据接管读 /media/cms、/media/chill
+      - "/vol3/1000/115观影:/media"
     environment:
       - TZ=Asia/Shanghai
       # STRM 文件里写入的播放地址，必须是 Emby 容器能访问到本程序的地址

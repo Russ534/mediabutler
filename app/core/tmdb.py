@@ -16,11 +16,13 @@ async def _get(path: str, **params):
 
 async def search(query: str, media_type: str = "multi", page: int = 1):
     data = await _get(f"/search/{media_type}", query=query, page=page)
+    items = [it for it in data.get("results", [])
+             if (it.get("media_type") or media_type) in ("movie", "tv")]
+    # Symedia 识别细节：按人气排序，避免冷门同名结果抢位
+    items.sort(key=lambda it: it.get("popularity") or 0, reverse=True)
     out = []
-    for it in data.get("results", []):
+    for it in items:
         mt = it.get("media_type") or media_type
-        if mt not in ("movie", "tv"):
-            continue
         out.append({
             "tmdb_id": it["id"],
             "media_type": mt,

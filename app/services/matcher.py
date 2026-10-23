@@ -53,13 +53,16 @@ def match_resource(text: str, link: str, only_missing: bool = True, extra_keywor
         if sub["media_type"] == "tv" and sub["season"] is not None and parsed["season"] is not None:
             if parsed["season"] != sub["season"]:
                 continue
-        # 5. 仅匹配缺集
+        # 5. 仅匹配缺集 / 洗版期用 tidy 策略引擎评分（CMS tidy.yaml 语义）
         missing = json.loads(sub["missing"] or "[]")
         if sub["status"] == "washing":
-            # 洗版期：只收更高质量
-            cur_rank = 0  # 简化：洗版期收 4K/Remux 关键词
-            if not re.search(r"(4K|2160P|REMUX|BluRay)", text, re.I):
-                continue
+            from ..core import washrule
+            new_info = {"resolution": parsed.get("resolution", ""),
+                        "source": parsed.get("source", ""),
+                        "effect": "HDR" if re.search(r"HDR|DV", text, re.I) else ""}
+            level, quality = washrule.score(sub["media_type"], new_info)
+            if level >= 999:
+                continue  # 未命中任何洗版优先级，不收
             action = "wash"
         elif only_missing and sub["media_type"] == "tv" and parsed["episodes"] and missing:
             if not set(parsed["episodes"]) & set(missing):
@@ -118,4 +121,10 @@ async def push_to_target(decision: dict, target: str, forward_chat_id: str = "")
                     "pushed" if ok else "failed", target, msg)
     if ok:
         log("INFO", "matcher", f"《{sub['title']}》资源已推送→{target}: {decision['parsed']['raw'][:60]}")
+        if target == "pan115":
+            from ..core import notify
+            try:
+                await notify.media_added(dict(sub), "转存")
+            except Exception as e:
+                log("WARN", "matcher", f"入库通知失败: {e}")
     return ok

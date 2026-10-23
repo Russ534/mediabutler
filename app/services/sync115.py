@@ -36,6 +36,14 @@ async def full_sync(path_id: int) -> dict:
                       (path_id, it["fid"], dir_rel))
             continue
         seen.add(it["fid"])
+        # 维护云端索引（接管 CMS cloud_data 后持续保鲜）
+        d.execute(
+            "INSERT INTO cloud_index(fid,pid,name,full_path,pickcode,sha1,size,is_dir,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(fid) DO UPDATE SET "
+            "pid=excluded.pid,name=excluded.name,pickcode=excluded.pickcode,"
+            "sha1=excluded.sha1,size=excluded.size,is_dir=excluded.is_dir,updated_at=excluded.updated_at",
+            (it["fid"], it["cid"], it["name"], "", it["pickcode"], it["sha1"], it["size"],
+             1 if it["is_dir"] else 0, time.time()))
         ext = Path(it["name"]).suffix.lower()
         if ext in pan115.VIDEO_EXT:
             if it["fid"] in known or not it["pickcode"]:
@@ -166,3 +174,37 @@ async def incremental_sync() -> dict:
     if handled:
         event("incr_sync", {"handled": handled})
     return {"groups": len(groups), "items": total, "handled": handled, "cursor": latest}
+
+
+async def cleanup_invalid() -> dict:
+    """无效清理（Symedia 手动同步的清理选项）：
+    本地存在但 115 云端已不存在的 STRM 删除 + 空目录回收。
+    以云端索引（cloud_index，需先全量同步或接管 CMS 数据）为准。"""
+    d = db()
+    cloud_fids = {r["fid"] for r in d.execute("SELECT fid FROM cloud_index WHERE is_dir=0").fetchall()}
+    stats = {"removed_strm": 0, "removed_dirs": 0, "checked": 0}
+    rows = d.execute("SELECT pan_fid, local_path FROM strm_files").fetchall()
+    for r in rows:
+        stats["checked"] += 1
+        if cloud_fids and r["pan_fid"] not in cloud_fids:
+            strm.remove_strm(r["pan_fid"])
+            stats["removed_strm"] += 1
+    # 回收空目录（只扫我们管理的同步目录，从最深的开始）
+    media_root = Path(config.MEDIA_ROOT)
+    roots = {media_root / r["local_dir"].lstrip("/")
+             for r in d.execute("SELECT local_dir FROM sync_paths").fetchall()}
+    for root in roots:
+        if not root.exists():
+            continue
+        dirs = sorted((p for p in root.rglob("*") if p.is_dir()),
+                      key=lambda p: len(p.parts), reverse=True)
+        for p in dirs:
+            try:
+                if not any(p.iterdir()):
+                    p.rmdir()
+                    stats["removed_dirs"] += 1
+            except OSError:
+                pass
+    log("INFO", "sync", f"无效清理完成: {stats}")
+    event("cleanup_done", stats)
+    return stats
