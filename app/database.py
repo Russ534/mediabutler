@@ -156,7 +156,8 @@ def db() -> sqlite3.Connection:
     con = getattr(_local, "con", None)
     if con is None:
         Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-        con = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+        con = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=120)
+        con.execute("PRAGMA busy_timeout=120000")
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
