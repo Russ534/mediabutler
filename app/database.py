@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS subscriptions(
   keywords TEXT DEFAULT '',            -- 额外关键词过滤（支持 /正则/）
   source TEXT DEFAULT 'manual',        -- manual|douban|emby|tg
   note TEXT DEFAULT '',
+  last_search_at REAL DEFAULT 0,        -- v2.0.2: 盘搜轮询游标
   created_at REAL, updated_at REAL
 );
 CREATE TABLE IF NOT EXISTS resources(
@@ -161,6 +162,12 @@ def db() -> sqlite3.Connection:
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        # 老库迁移：补新增列（已存在则忽略）
+        for mig in ("ALTER TABLE subscriptions ADD COLUMN last_search_at REAL DEFAULT 0",):
+            try:
+                con.execute(mig)
+            except sqlite3.OperationalError:
+                pass
         _local.con = con
     return con
 

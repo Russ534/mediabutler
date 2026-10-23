@@ -135,7 +135,11 @@ async def job_pan_search(cfg: dict) -> str:
     from .matcher import record_resource
     from .subscribe import refresh_missing
     d = db()
-    subs = d.execute("SELECT * FROM subscriptions WHERE status IN ('missing','partial')").fetchall()
+    # 轮换扫描：最久没搜的优先，每轮限量（默认 30 个），避免接管几百条订阅后首跑打爆盘搜
+    max_subs = int(cfg.get("max_subs", 30) or 30)
+    subs = d.execute(
+        "SELECT * FROM subscriptions WHERE status IN ('missing','partial') "
+        "ORDER BY last_search_at ASC, id ASC LIMIT ?", (max_subs,)).fetchall()
     found = 0
     for sub in subs:
         query = f"{sub['title']} {sub['year'] or ''}".strip()
@@ -164,7 +168,9 @@ async def job_pan_search(cfg: dict) -> str:
                 if ok:
                     found += 1
         await asyncio.sleep(0.5)
-    msg = f"盘搜补漏: 扫描 {len(subs)} 个缺失订阅，推送 {found} 条资源"
+        d.execute("UPDATE subscriptions SET last_search_at=? WHERE id=?", (time.time(), sub["id"]))
+        d.commit()
+    msg = f"盘搜补漏: 本轮扫描 {len(subs)} 个缺失订阅，推送 {found} 条资源"
     event("pan_search", {"subs": len(subs), "pushed": found})
     return msg
 
