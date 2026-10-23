@@ -1,0 +1,162 @@
+"""SQLite 存储层：连接、schema、日志/事件助手。"""
+import json
+import sqlite3
+import threading
+import time
+from pathlib import Path
+
+from .config import DB_PATH
+
+_local = threading.local()
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings(
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS subscriptions(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  media_type TEXT NOT NULL,            -- movie | tv
+  tmdb_id INTEGER,
+  douban_id TEXT,
+  title TEXT NOT NULL,
+  year TEXT,
+  poster TEXT,
+  season INTEGER,                      -- 仅剧集：订阅某一季，NULL=全部
+  status TEXT NOT NULL DEFAULT 'missing',  -- missing|partial|in_library|washing|archived
+  missing TEXT NOT NULL DEFAULT '[]',  -- JSON: 缺集列表 [1,2,3]
+  total_episodes INTEGER DEFAULT 0,
+  wash_days INTEGER DEFAULT 0,         -- 洗版天数，0=不洗版
+  wash_until TEXT,
+  keywords TEXT DEFAULT '',            -- 额外关键词过滤（支持 /正则/）
+  source TEXT DEFAULT 'manual',        -- manual|douban|emby|tg
+  note TEXT DEFAULT '',
+  created_at REAL, updated_at REAL
+);
+CREATE TABLE IF NOT EXISTS resources(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sub_id INTEGER,
+  title TEXT,
+  link TEXT,
+  link_type TEXT,                      -- 115|magnet|ed2k|quark|...
+  share_code TEXT,
+  source TEXT,                         -- tg频道名|nullbr|hdhive|pansou
+  resolution TEXT,
+  size TEXT,
+  season INTEGER, episodes TEXT DEFAULT '[]',
+  status TEXT DEFAULT 'new',           -- new|pushed|ignored|failed
+  push_target TEXT DEFAULT '',
+  message TEXT DEFAULT '',
+  created_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_resources_sub ON resources(sub_id);
+CREATE TABLE IF NOT EXISTS tg_cache(
+  channel_id INTEGER NOT NULL,
+  message_id INTEGER NOT NULL,
+  text TEXT,
+  links TEXT DEFAULT '[]',
+  parsed TEXT DEFAULT '{}',
+  msg_date REAL,
+  PRIMARY KEY(channel_id, message_id)
+);
+CREATE TABLE IF NOT EXISTS tasks(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  job_type TEXT NOT NULL,              -- douban|emby_sync|nullbr|checkin115|checkin_hdhive|tg_search|strm_sync|missing_scan|organize
+  cron TEXT DEFAULT '',
+  enabled INTEGER DEFAULT 1,
+  config TEXT DEFAULT '{}',
+  last_run REAL, last_result TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS sync_paths(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  pan_cid TEXT NOT NULL DEFAULT '0',   -- 115 目录 cid
+  pan_path TEXT DEFAULT '',
+  local_dir TEXT NOT NULL,             -- /media 下本地目录
+  media_type TEXT DEFAULT 'tv',        -- movie|tv|mixed
+  with_meta INTEGER DEFAULT 1,         -- 下载 nfo/图片/字幕
+  enabled INTEGER DEFAULT 1,
+  last_full_sync REAL,
+  UNIQUE(pan_cid, local_dir)
+);
+CREATE TABLE IF NOT EXISTS strm_files(
+  pan_fid TEXT PRIMARY KEY,            -- 115 文件 id
+  pickcode TEXT,
+  pan_cid TEXT,
+  local_path TEXT,
+  size INTEGER, sha1 TEXT,
+  updated_at REAL
+);
+CREATE TABLE IF NOT EXISTS life_events(
+  id TEXT PRIMARY KEY,                 -- 115 生活事件 id
+  type TEXT, file_name TEXT, pan_cid TEXT, pan_fid TEXT,
+  handled INTEGER DEFAULT 0,
+  created_at REAL
+);
+CREATE TABLE IF NOT EXISTS organize_rules(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  watch_cid TEXT NOT NULL,             -- 监看的 115 目录（如"待整理"）
+  match_keywords TEXT DEFAULT '',
+  media_type TEXT DEFAULT 'auto',
+  target_cid TEXT NOT NULL,            -- 目标目录 cid
+  rename_template TEXT DEFAULT '{title} ({year})/{title} ({year}){ext}',
+  enabled INTEGER DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS tg_rules(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  channel_ids TEXT NOT NULL DEFAULT '[]',  -- JSON 数组
+  push_target TEXT DEFAULT 'pan115',       -- pan115|tg|none
+  forward_chat_id TEXT DEFAULT '',
+  only_missing INTEGER DEFAULT 1,
+  keywords TEXT DEFAULT '',
+  enabled INTEGER DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS logs(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT, module TEXT, message TEXT, created_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(created_at);
+CREATE TABLE IF NOT EXISTS events(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT, payload TEXT DEFAULT '{}', created_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_events_time ON events(created_at);
+"""
+
+
+def db() -> sqlite3.Connection:
+    con = getattr(_local, "con", None)
+    if con is None:
+        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA journal_mode=WAL")
+        con.executescript(SCHEMA)
+        _local.con = con
+    return con
+
+
+_lock = threading.Lock()
+
+
+def log(level: str, module: str, message: str) -> None:
+    with _lock:
+        d = db()
+        d.execute("INSERT INTO logs(level,module,message,created_at) VALUES(?,?,?,?)",
+                  (level, module, message[:4000], time.time()))
+        # 只保留最近 2 万条
+        d.execute("DELETE FROM logs WHERE id < (SELECT MIN(id) FROM (SELECT id FROM logs ORDER BY id DESC LIMIT 20000))")
+        d.commit()
+    print(f"[{level}] {module}: {message}", flush=True)
+
+
+def event(type_: str, payload: dict) -> None:
+    with _lock:
+        d = db()
+        d.execute("INSERT INTO events(type,payload,created_at) VALUES(?,?,?)",
+                  (type_, json.dumps(payload, ensure_ascii=False)[:4000], time.time()))
+        d.execute("DELETE FROM events WHERE id < (SELECT MIN(id) FROM (SELECT id FROM events ORDER BY id DESC LIMIT 5000))")
+        d.commit()

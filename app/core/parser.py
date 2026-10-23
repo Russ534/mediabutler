@@ -1,0 +1,118 @@
+"""资源标题解析器：本地正则（高速）+ Gemini AI（兜底）。
+从混乱的 TG/盘搜标题中提取 标题/年份/季/集/分辨率/编码/来源。"""
+import json
+import re
+
+from .. import config
+from ..database import log
+
+RE_SEASON_EP = re.compile(
+    r"[Ss](\d{1,2})\s*[Ee][Pp]?(\d{1,3})(?:\s*[-–~]\s*[Ee]?(\d{1,3}))?")
+RE_SEASON_ONLY = re.compile(r"[Ss](\d{1,2})(?!\s*[Ee])|第\s*(\d{1,2})\s*季")
+RE_EP_ONLY = re.compile(r"[Ee][Pp]?(\d{1,3})|第\s*(\d{1,3})\s*[集话]")
+RE_YEAR = re.compile(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)")
+RE_RES = re.compile(r"(2160[Pp]|4[Kk]|1080[Pp]|720[Pp]|480[Pp]|8[Kk]|2[Kk])")
+RE_CODEC = re.compile(r"(HEVC|H\.?265|H\.?264|X265|X264|AV1|VC-?1|MPEG2?)", re.I)
+RE_SOURCE = re.compile(r"(REMUX|BluRay|BDRip|WEB-?DL|WEBRip|HDTV|DVDRip|ISO)", re.I)
+RE_EDITION = re.compile(r"(导演剪辑|Extended|Uncut|IMAX|剧场版|SP|OVA|特别篇)", re.I)
+
+# 链接提取
+RE_LINK = re.compile(
+    r"(magnet:\?xt=urn:btih:[a-zA-Z0-9]{20,}[^\s]*"
+    r"|ed2k://\|file\|[^\s]+\|"
+    r"|https?://(?:115\.com|anxia\.com|115cdn\.com)[^\s<>'\")]+"
+    r"|https?://(?:pan\.quark\.cn|pan\.baidu\.com|www\.alipan\.com|www\.aliyundrive\.com|www\.123pan\.com|123684\.com|123865\.com)[^\s<>'\")]+)")
+
+# 常见广告/垃圾行
+RE_AD = re.compile(r"(订阅|关注|加入|频道|群组|t\.me/joinchat|广告|推广|招代理|联系|客服|官方)")
+
+
+def parse_title(title: str) -> dict:
+    """本地正则解析。"""
+    r: dict = {"raw": title, "season": None, "episodes": [], "resolution": "",
+               "codec": "", "source": "", "year": "", "title_guess": ""}
+    m = RE_SEASON_EP.search(title)
+    if m:
+        r["season"] = int(m.group(1))
+        e1 = int(m.group(2))
+        e2 = int(m.group(3)) if m.group(3) else e1
+        r["episodes"] = list(range(min(e1, e2), max(e1, e2) + 1))
+    else:
+        m = RE_SEASON_ONLY.search(title)
+        if m:
+            r["season"] = int(m.group(1) or m.group(2))
+        m = RE_EP_ONLY.search(title)
+        if m and not r["episodes"]:
+            r["episodes"] = [int(m.group(1) or m.group(2))]
+    m = RE_RES.search(title)
+    if m:
+        r["resolution"] = m.group(1).upper().replace("2160P", "4K")
+    m = RE_CODEC.search(title)
+    if m:
+        r["codec"] = m.group(1).upper().replace(".", "")
+    m = RE_SOURCE.search(title)
+    if m:
+        r["source"] = m.group(1)
+    m = RE_YEAR.search(title)
+    if m:
+        r["year"] = m.group(1)
+    # 粗猜标题：去掉方括号标签后取第一段
+    clean = re.sub(r"[\[\]【】()（）]", " ", title)
+    clean = RE_SEASON_EP.sub(" ", clean)
+    clean = RE_SEASON_ONLY.sub(" ", clean)
+    clean = RE_RES.sub(" ", clean)
+    parts = [p.strip() for p in re.split(r"\s{2,}|[.·|｜]", clean) if len(p.strip()) >= 2]
+    r["title_guess"] = parts[0][:40] if parts else title[:40]
+    return r
+
+
+def extract_links(text: str) -> list[str]:
+    return [m.group(0).rstrip(".,;)") for m in RE_LINK.finditer(text)]
+
+
+def purify(text: str) -> str:
+    """消息净化器：剔除广告行，保留核心资源信息。"""
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if RE_AD.search(line) and not RE_LINK.search(line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+async def ai_parse(title: str) -> dict | None:
+    """Gemini AI 兜底解析（本地正则置信度低时调用）。"""
+    key = config.get("gemini.api_key")
+    if not key:
+        return None
+    model = config.get("gemini.model", "gemini-2.0-flash")
+    prompt = (
+        "从以下影视资源标题中提取信息，只输出JSON，字段："
+        'title(中文名),year,season(数字或null),episodes(数字数组),resolution,codec,source。标题：' + title)
+    try:
+        from .http import client
+        async with client("tmdb.proxy", timeout=30) as c:
+            r = await c.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                params={"key": key},
+                json={"contents": [{"parts": [{"text": prompt}]}],
+                      "generationConfig": {"responseMimeType": "application/json"}})
+            r.raise_for_status()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
+    except Exception as e:
+        log("WARN", "parser", f"Gemini 解析失败: {e}")
+        return None
+
+
+async def smart_parse(title: str) -> dict:
+    """混合解析：先正则，信息不足再走 AI。"""
+    r = parse_title(title)
+    if r["season"] is None and not r["episodes"] and not r["resolution"]:
+        ai = await ai_parse(title)
+        if ai:
+            r.update({k: v for k, v in ai.items() if v})
+    return r

@@ -1,0 +1,17 @@
+services:
+  mediabutler:
+    build: .
+    # 或直接拉取镜像：image: russ534/mediabutler:latest
+    container_name: mediabutler
+    restart: always
+    network_mode: bridge
+    ports:
+      - "8788:8788"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口
+    volumes:
+      - "./config:/config"              # 数据库、TG session、缓存（必须持久化）
+      - "/vol1/1000/media:/media"       # ← 改成你的媒体库实际路径，STRM 落在这里
+    environment:
+      - TZ=Asia/Shanghai
+      # STRM 文件里写入的播放地址，必须是 Emby 容器能访问到本程序的地址
+      # 填飞牛的局域网 IP，不要填 127.0.0.1
+      - MB_STRM_HOST=http://192.168.1.10:8788   # ← 改成你的飞牛 IP

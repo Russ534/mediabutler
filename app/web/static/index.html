@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediaButler · 影音管家</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="login-view" class="login-wrap" style="display:none">
+  <div class="login-card">
+    <h1>🎬 MediaButler</h1>
+    <p class="sub">影音管家 · All-in-One</p>
+    <input id="login-user" placeholder="账号" value="admin">
+    <input id="login-pass" type="password" placeholder="密码">
+    <button onclick="doLogin()">登 录</button>
+    <p id="login-err" class="err"></p>
+  </div>
+</div>
+
+<div id="app-view" style="display:none">
+  <aside class="sidebar">
+    <div class="logo">🎬 MediaButler</div>
+    <nav>
+      <a data-page="dashboard" class="active">📊 仪表盘</a>
+      <a data-page="subs">📺 订阅管理</a>
+      <a data-page="tg">📡 TG 监控</a>
+      <a data-page="sync">☁️ STRM 同步</a>
+      <a data-page="organize">🗂️ 网盘整理</a>
+      <a data-page="tasks">⏰ 定时任务</a>
+      <a data-page="resources">📦 资源记录</a>
+      <a data-page="settings">⚙️ 设置</a>
+      <a data-page="logs">📜 日志</a>
+    </nav>
+    <div class="side-foot"><a onclick="logout()">退出登录</a></div>
+  </aside>
+  <main class="main">
+    <section id="page-dashboard" class="page active">
+      <h2>仪表盘</h2>
+      <div class="cards" id="stat-cards"></div>
+      <h3>定时任务状态</h3>
+      <table id="dash-tasks"><thead><tr><th>任务</th><th>Cron</th><th>上次运行</th><th>结果</th><th>下次执行</th><th>操作</th></tr></thead><tbody></tbody></table>
+      <h3>最近事件</h3>
+      <div id="dash-events" class="event-list"></div>
+    </section>
+
+    <section id="page-subs" class="page">
+      <h2>订阅管理 <button class="btn-sm" onclick="showAddSub()">+ 添加订阅</button></h2>
+      <div class="filter-bar">
+        <select id="sub-filter" onchange="loadSubs()">
+          <option value="">全部状态</option><option value="missing">缺失</option>
+          <option value="partial">部分</option><option value="in_library">已入库</option>
+          <option value="washing">洗版中</option><option value="archived">已归档</option>
+        </select>
+      </div>
+      <div id="sub-list" class="sub-grid"></div>
+    </section>
+
+    <section id="page-tg" class="page">
+      <h2>TG 监控</h2>
+      <div class="card">
+        <h3>登录状态</h3>
+        <div id="tg-status">加载中…</div>
+        <div id="tg-login-form" style="display:none">
+          <input id="tg-phone" placeholder="手机号（带区号，如 +86138...）">
+          <button onclick="tgSendCode()">发送验证码</button>
+          <div id="tg-code-row" style="display:none;margin-top:8px">
+            <input id="tg-code" placeholder="验证码">
+            <input id="tg-password" type="password" placeholder="两步验证密码（如有）">
+            <button onclick="tgFinishLogin()">完成登录</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>监控规则 <button class="btn-sm" onclick="showAddTgRule()">+ 新增规则</button></h3>
+        <table id="tg-rules"><thead><tr><th>名称</th><th>频道</th><th>推送目标</th><th>仅缺集</th><th>关键词</th><th>操作</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h3>历史缓存搜索</h3>
+        <input id="tg-cache-q" placeholder="搜索已缓存的 TG 消息…" onkeydown="if(event.key==='Enter')tgCacheSearch()">
+        <div id="tg-cache-result"></div>
+      </div>
+    </section>
+
+    <section id="page-sync" class="page">
+      <h2>STRM 同步 <button class="btn-sm" onclick="showAddSyncPath()">+ 添加同步路径</button></h2>
+      <table id="sync-paths"><thead><tr><th>名称</th><th>115目录CID</th><th>本地目录</th><th>类型</th><th>上次全量</th><th>操作</th></tr></thead><tbody></tbody></table>
+      <p class="tip">全量同步只需成功一次，之后由「115增量同步」定时任务（生活事件）接力。STRM 指向本程序的 /stream 网关，播放时 302 到 115 直链。</p>
+      <h3>115 目录浏览（查 CID）</h3>
+      <input id="pan-cid" placeholder="目录 cid，默认 0=根目录" value="0">
+      <button onclick="browsePan()">浏览</button>
+      <div id="pan-list"></div>
+    </section>
+
+    <section id="page-organize" class="page">
+      <h2>网盘整理 <button class="btn-sm" onclick="showAddRule()">+ 添加规则</button></h2>
+      <table id="org-rules"><thead><tr><th>名称</th><th>监听目录</th><th>目标目录</th><th>类型</th><th>关键词</th><th>操作</th></tr></thead><tbody></tbody></table>
+      <p class="tip">规则会扫描「监听目录」中的视频文件，按 TMDB 匹配结果重命名并移动到「目标目录」下的 电影/剧集 分类中。</p>
+    </section>
+
+    <section id="page-tasks" class="page">
+      <h2>定时任务</h2>
+      <table id="task-list"><thead><tr><th>名称</th><th>类型</th><th>Cron</th><th>启用</th><th>上次结果</th><th>操作</th></tr></thead><tbody></tbody></table>
+      <p class="tip">任务类型：checkin115 / checkin_hdhive / douban / emby_sync / missing_scan / nullbr / tg_search / strm_sync / incr_sync / organize</p>
+    </section>
+
+    <section id="page-resources" class="page">
+      <h2>资源记录</h2>
+      <table id="res-list"><thead><tr><th>时间</th><th>标题</th><th>类型</th><th>来源</th><th>状态</th><th>推送目标</th><th>链接</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section id="page-settings" class="page">
+      <h2>设置</h2>
+      <div class="card"><h3>账户</h3>
+        <input id="pwd-old" type="password" placeholder="原密码">
+        <input id="pwd-new" type="password" placeholder="新密码">
+        <button onclick="changePwd()">修改密码</button>
+      </div>
+      <div id="settings-form" class="settings-grid"></div>
+      <div class="sticky-save"><button class="primary" onclick="saveSettings()">💾 保存设置</button>
+        <button onclick="testService('emby')">测试 Emby</button>
+        <button onclick="testService('pan115')">测试 115</button>
+        <button onclick="testService('hdhive')">测试影巢</button>
+        <button onclick="testService('notify')">测试通知</button>
+      </div>
+      <div id="test-result"></div>
+    </section>
+
+    <section id="page-logs" class="page">
+      <h2>日志</h2>
+      <div class="filter-bar">
+        <select id="log-level" onchange="loadLogs()">
+          <option value="">全部级别</option><option>INFO</option><option>WARN</option><option>ERROR</option>
+        </select>
+        <button onclick="loadLogs()">刷新</button>
+      </div>
+      <div id="log-list" class="log-list"></div>
+    </section>
+  </main>
+</div>
+
+<div id="modal" class="modal" style="display:none">
+  <div class="modal-card">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" id="modal-ok">确定</button></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
