@@ -102,6 +102,8 @@ async def push_to_target(decision: dict, target: str, forward_chat_id: str = "")
                 r = await pan115.share_receive(link)
                 ok = bool(r.get("state", True))
                 msg = str(r.get("error") or r.get("msg") or "")[:200]
+                if not ok and not msg:
+                    msg = json.dumps(r, ensure_ascii=False)[:200]
             elif lt in ("magnet", "ed2k"):
                 r = await pan115.add_offline([link])
                 ok = bool(r.get("state", True))

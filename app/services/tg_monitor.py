@@ -135,6 +135,13 @@ async def _handle_message(channel_id: int, message_id: int, text: str, msg_date:
         return
     # 按监控规则匹配
     from .matcher import match_resource, push_to_target
+    from ..core.pansearch import _link_type
+    from .. import config
+    accept = {t.strip() for t in (config.get("pansou.accept_types") or "115,magnet,ed2k").split(",") if t.strip()}
+    # 只处理白名单里的网盘类型，夸克/百度等直接忽略，避免刷出成堆失败记录
+    links = [l for l in links if _link_type(l) in accept]
+    if not links:
+        return
     rules = d.execute("SELECT * FROM tg_rules WHERE enabled=1").fetchall()
     for rule in rules:
         ids = json.loads(rule["channel_ids"])
