@@ -41,6 +41,8 @@ _DEFAULTS = {
     # 盘搜（pansou 聚合，默认千山实例；可配第二源）
     "pansou.base_url": "https://pansou.qianshan.app",
     "pansou.base_url2": "",
+    # 可推送的资源类型：115 分享直转存；magnet/ed2k 走 115 离线下载
+    "pansou.accept_types": "115,magnet,ed2k",
     # AI（OpenAI 兼容接口，默认 wb-hub 反代；留空 api_key 则尝试 Gemini）
     "ai.base_url": "http://192.168.31.201:8788/v1",
     "ai.api_key": "",

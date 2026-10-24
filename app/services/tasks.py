@@ -159,10 +159,17 @@ async def job_pan_search(cfg: dict) -> str:
                 log("WARN", "hdhive", f"影巢查询失败: {e}")
         from .matcher import match_resource, push_to_target
         from ..core.pansearch import _link_type
-        n115 = sum(1 for x in results if _link_type(x["link"]) == "115")
+        accept = {t.strip() for t in (config.get("pansou.accept_types") or "115,magnet,ed2k").split(",") if t.strip()}
+        usable = [x for x in results if _link_type(x["link"]) in accept]
         if results:
-            log("INFO", "pansearch", f"《{sub['title']}》搜到 {len(results)} 条（115 链接 {n115}）")
-        for r in results:
+            log("INFO", "pansearch", f"《{sub['title']}》搜到 {len(results)} 条，可用 {len(usable)} 条（白名单 {','.join(sorted(accept))}）")
+        # 白名单外的资源也留痕（最多 5 条/订阅），便于在「资源记录」里人工捞
+        for r in [x for x in results if x not in usable][:5]:
+            from ..core.parser import parse_title
+            record_resource(sub["id"], (r.get("title") or query)[:300], r["link"],
+                            "pansou", parse_title(r.get("title") or query),
+                            "ignored", "", "非白名单类型 " + _link_type(r["link"]))
+        for r in usable:
             link = r["link"]
             # 115 分享链接带提取码时拼到 URL 上，转存接口才能接
             if r.get("password") and r.get("link_type") == "115" and "password=" not in link:

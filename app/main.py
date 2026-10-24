@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     await stop_listener()
 
 
-app = FastAPI(title="MediaButler", version="2.0.3", lifespan=lifespan)
+app = FastAPI(title="MediaButler", version="2.0.4", lifespan=lifespan)
 
 from .api.auth import router as auth_router
 from .api.routes import router as api_router
@@ -52,7 +52,7 @@ async def index():
 
 @app.get("/api/version", include_in_schema=False)
 async def version():
-    return {"name": "MediaButler", "version": "2.0.3"}
+    return {"name": "MediaButler", "version": "2.0.4"}
 
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
