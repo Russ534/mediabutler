@@ -6,6 +6,9 @@ services:
     # 或直接拉取镜像：image: russ534/mediabutler:latest
     container_name: mediabutler
     restart: always
+    # 内存硬上限：超过 1.5G 直接 OOM 重启本容器，绝不拖垮整台飞牛（11G 内存还跑着十几个容器）
+    mem_limit: 1536m
+    mem_reservation: 256m
     network_mode: bridge
     ports:
       - "8866:8866"        # Web 管理端 + STRM 网关 + Emby 反代，同一端口（8788 是 wb-hub，别撞）

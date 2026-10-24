@@ -59,22 +59,27 @@ def import_all() -> dict:
         try:
             c = sqlite3.connect(f"file:{CMS_DB}?mode=ro", uri=True)
             c.row_factory = sqlite3.Row
-            rows = c.execute(
-                "SELECT fid,pid,name,full_y_path,pick_code,sha1,size,is_dir FROM cloud_data").fetchall()
-            c.close()
-            batch = [(str(r["fid"]), str(r["pid"] or ""), r["name"], r["full_y_path"] or "",
-                      r["pick_code"] or "", r["sha1"] or "", int(r["size"] or 0),
-                      1 if r["is_dir"] else 0, now) for r in rows]
+            cur = c.execute(
+                "SELECT fid,pid,name,full_y_path,pick_code,sha1,size,is_dir FROM cloud_data")
             sql = ("INSERT INTO cloud_index(fid,pid,name,full_path,pickcode,sha1,size,is_dir,updated_at) "
                    "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(fid) DO UPDATE SET "
                    "pid=excluded.pid,name=excluded.name,full_path=excluded.full_path,"
                    "pickcode=excluded.pickcode,sha1=excluded.sha1,size=excluded.size,"
                    "is_dir=excluded.is_dir,updated_at=excluded.updated_at")
-            # 分批提交，避免 50 万行单事务长占写锁饿死其他任务
-            for i in range(0, len(batch), 5000):
-                d.executemany(sql, batch[i:i + 5000])
+            # 流式读取 + 分批提交：50 万行若一次性 fetchall 进内存就是 1.5GB+ 尖峰
+            total = 0
+            while True:
+                rows = cur.fetchmany(5000)
+                if not rows:
+                    break
+                batch = [(str(r["fid"]), str(r["pid"] or ""), r["name"], r["full_y_path"] or "",
+                          r["pick_code"] or "", r["sha1"] or "", int(r["size"] or 0),
+                          1 if r["is_dir"] else 0, now) for r in rows]
+                d.executemany(sql, batch)
                 d.commit()
-            stats["cloud_index"] = len(batch)
+                total += len(batch)
+            c.close()
+            stats["cloud_index"] = total
         except Exception as e:
             stats["errors"].append(f"cloud_data: {e}")
             log("ERROR", "legacy", f"cloud_data 导入失败: {e}")

@@ -198,18 +198,24 @@ async def start_listener() -> None:
         log("INFO", "tg", "暂无启用的监控规则，监听待命")
     log("INFO", "tg", f"TG 监听启动，覆盖 {len(channel_ids)} 个频道/群组")
 
-    @c.on(tg_events.NewMessage)
-    async def _on_msg(ev):
+    async def _dispatch(cid: int, ev) -> None:
         try:
-            cid = ev.chat_id
-            if channel_ids and cid not in channel_ids and abs(cid) not in channel_ids:
-                return
             text = ev.message.message or ""
             if not text:
                 return
             await _handle_message(cid, ev.message.id, text, ev.message.date.timestamp())
         except Exception as e:
             log("ERROR", "tg", f"消息处理异常: {e}")
+
+    if channel_ids:
+        # 关键：chats= 让 Telethon 在服务端/客户端双重过滤，
+        # 不注册全量 NewMessage（否则启动时 getDifference 会把所有会话的
+        # 离线消息全拉下来建对象，内存瞬间爆炸）
+        @c.on(tg_events.NewMessage(chats=list(channel_ids)))
+        async def _on_msg(ev):
+            await _dispatch(ev.chat_id, ev)
+    else:
+        log("INFO", "tg", "无启用频道，不注册消息监听（仅保活连接）")
 
     # 指令 bot：给自己发「搜 xxx」触发主动搜索
     @c.on(tg_events.NewMessage(outgoing=True, pattern=r"^搜\s+(.+)$"))

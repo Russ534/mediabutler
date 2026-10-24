@@ -525,7 +525,6 @@ async def test_pansou(q: str = "流浪地球", authorization: str = Header("")):
 @router.get("/logs")
 async def get_logs(level: str = "", module: str = "", limit: int = 200, authorization: str = Header("")):
     _auth(authorization)
-    d = db()
     sql = "SELECT * FROM logs WHERE 1=1"
     args: list = []
     if level:
@@ -536,16 +535,67 @@ async def get_logs(level: str = "", module: str = "", limit: int = 200, authoriz
         args.append(module)
     sql += " ORDER BY id DESC LIMIT ?"
     args.append(limit)
+    d = db()
     return [dict(r) for r in d.execute(sql, args).fetchall()]
 
 
+@router.get("/stats/memory")
+async def stats_memory(authorization: str = Header("")):
+    """内存探针：RSS、对象计数、线程数。内存再爆时先打这个接口看曲线。"""
+    _auth(authorization)
+    import gc
+    import threading
+    rss_kb = 0
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS"):
+                    rss_kb = int(line.split()[1])
+                    break
+    except OSError:
+        pass
+    gc.collect()
+    return {
+        "rss_mb": round(rss_kb / 1024, 1),
+        "threads": threading.active_count(),
+        "gc_objects": len(gc.get_objects()),
+        "gc_counts": gc.get_count(),
+    }
+
+
 # ---------- Emby Webhook（免登录，靠路径混淆 + 可选 token） ----------
+
+_missing_refresh_state = {"running": False, "pending": False, "last": 0.0}
+
+
+async def _refresh_missing_debounced() -> None:
+    """缺集刷新单飞 + 60 秒冷却：Emby 入库时 webhook 可能每秒来一串，
+    绝不能每个事件 spawn 一次全量刷新（671 订阅 × TMDB 请求会瞬间堆爆内存）。"""
+    import time as _t
+    st = _missing_refresh_state
+    if st["running"]:
+        st["pending"] = True
+        return
+    if _t.time() - st["last"] < 60:
+        st["pending"] = True
+        return
+    st["running"] = True
+    try:
+        from ..services.subscribe import refresh_all_missing
+        while True:
+            st["pending"] = False
+            st["last"] = _t.time()
+            await refresh_all_missing()
+            if not st["pending"]:
+                break
+    finally:
+        st["running"] = False
+
 
 @router.post("/webhook/emby")
 async def emby_webhook(request: Request):
     payload = await request.json()
     from ..core.emby import parse_webhook
-    from ..services.subscribe import refresh_all_missing
     # 深度删除：Emby 里删除 STRM 时联动删除 115 云端文件（Symedia 神医插件同款）
     event_name = str(payload.get("Event") or payload.get("event") or "")
     item = payload.get("Item") or {}
@@ -560,7 +610,7 @@ async def emby_webhook(request: Request):
         log("INFO", "webhook", f"Emby 入库: {info['title']} (tmdb={info['tmdb_id']})")
         event("emby_webhook", info)
         import asyncio
-        asyncio.create_task(refresh_all_missing())
+        asyncio.create_task(_refresh_missing_debounced())
     return {"ok": True}
 
 

@@ -161,6 +161,8 @@ def db() -> sqlite3.Connection:
         con.execute("PRAGMA busy_timeout=120000")
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA journal_mode=WAL")
+        # 每个连接的页缓存封顶 32MB（thread-local 多连接场景防内存无界增长）
+        con.execute("PRAGMA cache_size=-32768")
         con.executescript(SCHEMA)
         # 老库迁移：补新增列（已存在则忽略）
         for mig in ("ALTER TABLE subscriptions ADD COLUMN last_search_at REAL DEFAULT 0",):
@@ -175,13 +177,19 @@ def db() -> sqlite3.Connection:
 _lock = threading.Lock()
 
 
+_log_calls = 0
+
+
 def log(level: str, module: str, message: str) -> None:
+    global _log_calls
     with _lock:
         d = db()
         d.execute("INSERT INTO logs(level,module,message,created_at) VALUES(?,?,?,?)",
                   (level, module, message[:4000], time.time()))
-        # 只保留最近 2 万条
-        d.execute("DELETE FROM logs WHERE id < (SELECT MIN(id) FROM (SELECT id FROM logs ORDER BY id DESC LIMIT 20000))")
+        _log_calls += 1
+        # 清理旧日志：每 200 次插入才跑一次（原来每条都跑 ORDER BY 子查询，纯浪费）
+        if _log_calls % 200 == 0:
+            d.execute("DELETE FROM logs WHERE id < (SELECT MIN(id) FROM (SELECT id FROM logs ORDER BY id DESC LIMIT 20000))")
         d.commit()
     print(f"[{level}] {module}: {message}", flush=True)
 
