@@ -217,6 +217,7 @@ async function tgCacheSearch() {
 /* ---------- 同步 ---------- */
 async function loadSync() {
   const ps = await api('/sync/paths');
+  cloudTree('0');
   $('#sync-paths tbody').innerHTML = ps.map(p => `<tr>
     <td>${p.name}</td><td>${p.pan_cid}</td><td>${p.local_dir}</td><td>${p.media_type}</td>
     <td>${fmtTime(p.last_full_sync)}</td>
@@ -241,6 +242,35 @@ async function browsePan() {
   $('#pan-list').innerHTML = items.map(i => i.is_dir ?
     `<div class="sr" style="cursor:pointer;padding:6px" onclick="$('#pan-cid').value='${i.cid}';browsePan()">📁 ${i.name} <code class="tip">cid=${i.cid}</code></div>` :
     `<div style="padding:6px" class="tip">🎬 ${i.name}</div>`).join('');
+}
+
+/* ---------- 云端目录树（本地索引） ---------- */
+let cloudStack = [];
+async function cloudTree(pid) {
+  const items = await api('/cloud/tree?pid=' + pid).catch(() => []);
+  if (pid === '0') cloudStack = [];
+  else if (!cloudStack.some(x => x.fid === pid)) {
+    const p = await api('/cloud/path?fid=' + pid).catch(() => ({ path: '' }));
+    cloudStack.push({ fid: pid, name: p.path || pid });
+  }
+  $('#cloud-crumb').innerHTML = '当前：/' + cloudStack.map(x => `<a href="javascript:cloudTree('${x.fid}')">${x.name.split('/').pop()}</a>`).join(' / ');
+  $('#cloud-tree').innerHTML = items.length ? items.map(i => i.is_dir ?
+    `<div style="padding:6px;cursor:pointer" onclick="cloudTree('${i.fid}')">📁 <b>${i.name}</b> <span class="tip">${i.dirs} 子目录 / ${i.files} 文件</span>
+       <button class="btn-sm" onclick="event.stopPropagation();pickCloud('${i.fid}','${i.name}')">选为同步目录</button></div>` :
+    `<div style="padding:6px" class="tip">🎬 ${i.name}</div>`).join('') : '<div class="tip">索引为空：先在数据接管页一键接管，或跑一次全量同步</div>';
+}
+function pickCloud(fid, name) {
+  showModal('把「' + name + '」加入同步', `
+    <input id="sp-name" value="${name}">
+    <input id="sp-cid" value="${fid}" readonly>
+    <input id="sp-dir" placeholder="本地目录（/media 下相对路径，如 tv）" value="mediabutler/${name}">
+    <select id="sp-type"><option value="tv">剧集</option><option value="movie">电影</option><option value="mixed">混合</option></select>
+    <label><input type="checkbox" id="sp-meta" checked> 同步 nfo/字幕/图片等元数据</label>`, async () => {
+    await api('/sync/paths', { method: 'POST', body: JSON.stringify({
+      name: $('#sp-name').value, pan_cid: $('#sp-cid').value, local_dir: $('#sp-dir').value,
+      media_type: $('#sp-type').value, with_meta: $('#sp-meta').checked }) });
+    loadSync();
+  });
 }
 
 /* ---------- 整理 ---------- */

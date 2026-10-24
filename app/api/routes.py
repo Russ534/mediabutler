@@ -210,6 +210,21 @@ async def full_sync_path(pid: int, authorization: str = Header("")):
     return {"ok": True, "msg": "全量同步已在后台开始，查看日志跟踪进度"}
 
 
+@router.get("/cloud/tree")
+async def cloud_tree_api(pid: str = "0", authorization: str = Header("")):
+    """云端目录树（来自已接管的本地索引，秒开，不打 115 API）。"""
+    _auth(authorization)
+    from ..services.sync115 import cloud_tree
+    return cloud_tree(pid)
+
+
+@router.get("/cloud/path")
+async def cloud_path_api(fid: str, authorization: str = Header("")):
+    _auth(authorization)
+    from ..services.sync115 import cloud_path
+    return {"fid": fid, "path": cloud_path(fid)}
+
+
 @router.get("/pan115/dir")
 async def pan_dir(cid: str = "0", authorization: str = Header("")):
     _auth(authorization)

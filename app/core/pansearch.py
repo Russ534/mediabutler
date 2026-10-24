@@ -1,5 +1,7 @@
 """盘搜：pansou（默认 https://pansou.qianshan.app）聚合搜索 115/夸克/阿里/百度/磁力资源。
 接口格式：POST /api/search {"kw":..., "res":"merge", "src":"all"} → data.merged_by_type."""
+import asyncio
+
 from .. import config
 from ..database import log
 from .http import client
@@ -38,35 +40,49 @@ async def pansou_search(query: str, base: str = "") -> list[dict]:
     """调用 pansou 实例搜索。返回 [{title, link, link_type, password, size, source}]"""
     base = (base or config.get("pansou.base_url") or "https://pansou.qianshan.app").rstrip("/")
     out = []
+    last_err = None
+    # 盘搜站偶发超时（空错误信息），重试 2 次
+    for attempt in range(3):
+        try:
+            async with client(timeout=45) as c:
+                r = await c.post(f"{base}/api/search",
+                                 json={"kw": query, "res": "merge", "src": "all", "cloud_types": []})
+                if r.status_code != 200:
+                    # 兼容 GET 形式
+                    r = await c.get(f"{base}/api/search", params={"kw": query})
+                r.raise_for_status()
+                data = r.json()
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            log("ERROR", "pansou", f"盘搜异常({base}): {e}")
+            return out
     try:
-        async with client(timeout=30) as c:
-            r = await c.post(f"{base}/api/search",
-                             json={"kw": query, "res": "merge", "src": "all", "cloud_types": []})
-            if r.status_code != 200:
-                # 兼容 GET 形式
-                r = await c.get(f"{base}/api/search", params={"kw": query})
-            r.raise_for_status()
-            data = r.json()
-            merged = (data.get("data") or {}).get("merged_by_type") or {}
-            for pan, items in merged.items():
-                if not isinstance(items, list):
-                    continue
-                for it in items:
-                    link = it.get("url") or ""
-                    if not link:
-                        continue
-                    out.append({
-                        "title": it.get("note") or it.get("title") or query,
-                        "link": link,
-                        "link_type": PAN_NAME_MAP.get(pan) or _link_type(link),
-                        "password": it.get("password") or "",
-                        "size": "",
-                        "resolution": "",
-                        "source": it.get("source") or pan,
-                        "datetime": it.get("datetime") or "",
-                    })
+        merged = (data.get("data") or {}).get("merged_by_type") or {}
     except Exception as e:
-        log("ERROR", "pansou", f"盘搜异常({base}): {e}")
+        log("ERROR", "pansou", f"盘搜响应解析失败({base}): {e}")
+        return out
+    for pan, items in merged.items():
+        if not isinstance(items, list):
+            continue
+        for it in items:
+            link = it.get("url") or ""
+            if not link:
+                continue
+            out.append({
+                "title": it.get("note") or it.get("title") or query,
+                "link": link,
+                "link_type": PAN_NAME_MAP.get(pan) or _link_type(link),
+                "password": it.get("password") or "",
+                "size": "",
+                "resolution": "",
+                "source": it.get("source") or pan,
+                "datetime": it.get("datetime") or "",
+            })
     return out
 
 

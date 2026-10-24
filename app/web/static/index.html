@@ -87,7 +87,11 @@
       <h2>STRM 同步 <button class="btn-sm" onclick="showAddSyncPath()">+ 添加同步路径</button></h2>
       <table id="sync-paths"><thead><tr><th>名称</th><th>115目录CID</th><th>本地目录</th><th>类型</th><th>上次全量</th><th>操作</th></tr></thead><tbody></tbody></table>
       <p class="tip">全量同步只需成功一次，之后由「115增量同步」定时任务（生活事件）接力。STRM 指向本程序的 /stream 网关，播放时 302 到 115 直链。</p>
-      <h3>115 目录浏览（查 CID）</h3>
+      <h3>云端目录树（本地索引，秒开） <button class="btn-sm" onclick="cloudTree('0')">刷新根目录</button></h3>
+      <p class="tip">直接读已接管的云端索引，不请求 115。点文件夹进入，选中后可一键填入添加同步路径表单。</p>
+      <div id="cloud-crumb" class="tip"></div>
+      <div id="cloud-tree"></div>
+      <h3>115 目录浏览（实时查 CID）</h3>
       <input id="pan-cid" placeholder="目录 cid，默认 0=根目录" value="0">
       <button onclick="browsePan()">浏览</button>
       <div id="pan-list"></div>

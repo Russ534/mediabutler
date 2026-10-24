@@ -11,6 +11,38 @@ from ..core import pan115, strm
 _ADD_BEHAVIORS = {"upload_file", "upload_image_file", "receive_files", "move_file", "move_image_file"}
 
 
+def cloud_tree(parent: str = "0") -> list[dict]:
+    """从云端索引（cloud_index）取某目录的直接子节点。
+    接管 CMS 的 50 万索引本地就在，秒开，不必打 115 API。"""
+    d = db()
+    rows = d.execute(
+        "SELECT fid,name,is_dir FROM cloud_index WHERE pid=? ORDER BY is_dir DESC, name",
+        (str(parent),)).fetchall()
+    out = []
+    for r in rows:
+        child_dirs = d.execute("SELECT COUNT(*) c FROM cloud_index WHERE pid=? AND is_dir=1",
+                               (r["fid"],)).fetchone()["c"]
+        child_files = d.execute("SELECT COUNT(*) c FROM cloud_index WHERE pid=? AND is_dir=0",
+                                (r["fid"],)).fetchone()["c"]
+        out.append({"fid": r["fid"], "name": r["name"], "is_dir": bool(r["is_dir"]),
+                    "dirs": child_dirs, "files": child_files})
+    return out
+
+
+def cloud_path(fid: str) -> str:
+    """由 fid 回溯出云端完整路径（父链查找，最多 30 层防环）。"""
+    d = db()
+    parts, cur, guard = [], str(fid), 0
+    while cur and cur != "0" and guard < 30:
+        guard += 1
+        row = d.execute("SELECT pid,name FROM cloud_index WHERE fid=?", (cur,)).fetchone()
+        if not row:
+            break
+        parts.append(row["name"])
+        cur = str(row["pid"])
+    return "/" + "/".join(reversed(parts))
+
+
 async def full_sync(path_id: int) -> dict:
     """对一个 sync_path 做全量同步：视频生成 strm（保留网盘目录层级），元数据文件按原名下载。
     同时登记 sync_dirs 目录映射（供增量同步路由子目录事件）。"""
