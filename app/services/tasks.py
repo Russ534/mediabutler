@@ -158,6 +158,10 @@ async def job_pan_search(cfg: dict) -> str:
             except Exception as e:
                 log("WARN", "hdhive", f"影巢查询失败: {e}")
         from .matcher import match_resource, push_to_target
+        from ..core.pansearch import _link_type
+        n115 = sum(1 for x in results if _link_type(x["link"]) == "115")
+        if results:
+            log("INFO", "pansearch", f"《{sub['title']}》搜到 {len(results)} 条（115 链接 {n115}）")
         for r in results:
             link = r["link"]
             # 115 分享链接带提取码时拼到 URL 上，转存接口才能接
